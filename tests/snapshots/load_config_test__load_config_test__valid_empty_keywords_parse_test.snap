@@ -1,0 +1,19 @@
+---
+source: tests/load_config_test.rs
+expression: radyko_config
+---
+recording:
+  output_dir: "./recorded"
+  schedule_update_interval_secs: 3600
+  duration_buffer_secs:
+    start: 30
+    end: 90
+keywords: ~
+rules:
+  LFR:
+    - 0 0 0 * * Mon-Sat
+    - 0 0 1 * * Tue-Sat
+    - 0 0 3 * * Mon-Sat
+  TBS:
+    - "0 0 0 * * 3,4,6"
+    - 0 0 1 * * 4-7
