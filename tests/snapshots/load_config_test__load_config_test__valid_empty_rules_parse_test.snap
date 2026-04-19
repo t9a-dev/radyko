@@ -1,0 +1,19 @@
+---
+source: tests/load_config_test.rs
+expression: radyko_config
+---
+recording:
+  output_dir: "./recorded"
+  schedule_update_interval_secs: 3600
+  duration_buffer_secs:
+    start: 30
+    end: 90
+keywords:
+  ABC:
+    - ヤーレンズのダダダ団
+  FBC:
+    - にゃんこスターのきらりん
+  nationwide:
+    - トム・ブラウン
+    - トムブラウン
+rules: ~

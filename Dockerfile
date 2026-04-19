@@ -1,0 +1,100 @@
+# https://kerkour.com/rust-production-checklist
+# docker build -t radyko:alpine . && docker run -ti --rm radyko:alpine search --keyword "オールナイトニッポン" --station-id "LFR"
+# https://hub.docker.com/_/rust/#rustversion-alpine
+# rust:alpineイメージ上でcargo build --releaseとしているのでmusl libcによる静的リンクビルドになる
+####################################################################################################
+## Build
+####################################################################################################
+ARG USER=radyko
+ARG UID=1000
+
+FROM rust:alpine AS build
+
+RUN apk update && \
+    apk upgrade --no-cache && \
+    apk add --no-cache mold musl musl-dev libc-dev cmake clang clang-dev file \
+        git make build-base bash curl wget zip gnupg coreutils gcc g++  zstd binutils ca-certificates upx
+
+# 先に空のプロジェクトを作成して依存関係のビルドのみを済ませておいてキャッシュする
+RUN cargo new --bin radyko
+WORKDIR /radyko
+COPY Cargo.toml Cargo.lock .cargo/ ./
+RUN cargo build --release && rm src/*.rs
+
+# 自分のソースコードをコピーしてビルドする
+COPY src ./src
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release
+
+
+####################################################################################################
+## This stage is used to get the correct files into the final image
+####################################################################################################
+FROM alpine:latest AS files
+
+# mailcap is used for content type (MIME type) detection
+# tzdata is used for timezone info
+RUN apk update && \
+    apk upgrade --no-cache && \
+    apk add --no-cache ca-certificates mailcap tzdata && \
+    cp /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
+    # タイムゾーンを日本に固定
+    echo "Asia/Tokyo" > /etc/timezone
+
+RUN update-ca-certificates
+
+ARG USER
+ARG UID
+
+ENV USER="${USER}"
+ENV UID="${UID}"
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    "${USER}"
+
+
+####################################################################################################
+## Final image
+####################################################################################################
+FROM scratch
+
+ARG USER
+ARG UID
+ENV USER="${USER}"
+ENV UID="${UID}"
+
+# /etc ディレクトリに対して実行権限(x)を付与しておかないと/etc/*を探索できず、Permission Deniedエラーとなる
+# プログラム(radyko)で利用しているクレート(hickory-dns)が/etc/resolv.confを見に行くので、実行ユーザーが/etcを探索できる必要がある
+# https://docs.rs/hickory-resolver/0.26.0/hickory_resolver/system_conf/
+COPY --from=files --chmod=100 --chown="${UID}":"${UID}" /etc /etc
+
+# /etc/nsswitch.conf may be used by some DNS resolvers
+# /etc/mime.types may be used to detect the MIME type of files
+COPY --from=files --chmod=444 \
+    /etc/passwd \
+    /etc/group \
+    /etc/nsswitch.conf \
+    /etc/mime.types \
+    /etc/
+
+COPY --from=files --chmod=444 /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=files --chmod=444 /etc/localtime /etc/localtime
+COPY --from=files --chmod=444 /etc/timezone /etc/timezone
+COPY --from=files --chmod=444 /usr/share/zoneinfo /usr/share/zoneinfo
+
+# Copy our build
+COPY --from=build /radyko/target/release/radyko /bin/radyko
+
+# Use an unprivileged user.
+USER ${USER}
+
+WORKDIR /app
+
+ENTRYPOINT ["/bin/radyko"]
