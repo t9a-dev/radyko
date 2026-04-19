@@ -1,0 +1,27 @@
+[recording]
+# 録音ファイルの保存先
+# docker-composeで利用するときのコンテナ内でのパスに注意(カレントディレクトリ以下で指定しておけば問題にならない)
+output_dir = "./recorded"
+# 録音対象番組の取得間隔
+schedule_update_interval_secs = 3600 
+
+# 番組開始・終了時間に対する録音開始・終了のバッファ時間
+[recording.duration_buffer_secs]
+# 番組開始時間に対してX秒前に録音開始
+start = 30
+# 番組終了時間に対してX秒後に録音終了
+# radikoは遅延があるので終了時間側のバッファを長めにとっておくとよさそう
+end = 90
+
+[keywords]
+nationwide = [
+  "トム・ブラウン",
+  "トムブラウン",
+]
+
+"ABC" = [
+  "ヤーレンズのダダダ団",
+]
+"FBC" = [
+  "にゃんこスターのきらりん",
+]

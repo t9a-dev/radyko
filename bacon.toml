@@ -1,0 +1,20 @@
+
+# instaによるスナップショットテストで生成される新規snapshotファイルを変更検知対象外に指定
+[jobs.nextest]
+command = ["cargo", "nextest", "run"]
+need_stdout = true
+default_watch = true
+ignore = ["**/*.snap.new"]
+
+[jobs.test]
+command = ["cargo", "test"]
+need_stdout = true
+default_watch = true
+ignore = ["**/*.snap.new"]
+
+# bacon --headless test-headless 
+# 標準出力を確認したい時に使うテストジョブ設定
+[jobs.test-headless]
+command = ["cargo", "test", "run_test", "--", "--nocapture"]
+need_stdout = true
+analyzer = "standard"

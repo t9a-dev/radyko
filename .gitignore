@@ -1,0 +1,7 @@
+/target
+*.env
+**/*.aac
+**/.DS_Store
+radyko_cache
+config.toml
+compose.yml
