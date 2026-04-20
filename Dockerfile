@@ -57,7 +57,10 @@ RUN adduser \
     --shell "/sbin/nologin" \
     --no-create-home \
     --uid "${UID}" \
-    "${USER}"
+    "${USER}" && \
+    mkdir -p /app && \
+    chown -R "${UID}:${UID}" /app && \
+    chown 755 /app
 
 
 ####################################################################################################
@@ -70,10 +73,10 @@ ARG UID
 ENV USER="${USER}"
 ENV UID="${UID}"
 
-# /etc ディレクトリに対して実行権限(x)を付与しておかないと/etc/*を探索できず、Permission Deniedエラーとなる
-# プログラム(radyko)で利用しているクレート(hickory-dns)が/etc/resolv.confを見に行くので、実行ユーザーが/etcを探索できる必要がある
+# ここで明示的に/etcを--chmod=555としておかないと、次のCOPY --chmod=444により/etcに実行権限が付与されないことから探索できず、Permission Deniedエラーとなる
+# プログラム(radyko)で利用しているクレート(hickory-dns)が/etc/resolv.confを見に行くので、/etcを探索できる必要がある
 # https://docs.rs/hickory-resolver/0.26.0/hickory_resolver/system_conf/
-COPY --from=files --chmod=100 --chown="${UID}":"${UID}" /etc /etc
+COPY --from=files --chmod=555 /etc /etc
 
 # /etc/nsswitch.conf may be used by some DNS resolvers
 # /etc/mime.types may be used to detect the MIME type of files
@@ -89,10 +92,13 @@ COPY --from=files --chmod=444 /etc/localtime /etc/localtime
 COPY --from=files --chmod=444 /etc/timezone /etc/timezone
 COPY --from=files --chmod=444 /usr/share/zoneinfo /usr/share/zoneinfo
 
-# Copy our build
+# アプリケーションが作業するディレクトリのオーナーを明示的に指定してコピーすることで実行時に権限周りのエラーが発生しないようにしている
+COPY --from=files --chown="${UID}:${UID}" /app /app
+
+# 実行バイナリのコピー
 COPY --from=build /radyko/target/release/radyko /bin/radyko
 
-# Use an unprivileged user.
+# 実行ユーザーの指定
 USER ${USER}
 
 WORKDIR /app
