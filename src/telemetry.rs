@@ -3,7 +3,7 @@ use opentelemetry::{
     trace::{Span, Tracer, TracerProvider},
 };
 use opentelemetry_sdk::{Resource, trace::SdkTracerProvider};
-use tracing::level_filters::LevelFilter;
+use tracing::{info, level_filters::LevelFilter};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{EnvFilter, Registry, fmt, layer::SubscriberExt};
 
@@ -18,9 +18,7 @@ pub fn get_radyko_tracer(service_name: &str) -> &'static opentelemetry::global::
 pub fn init_telemetry(
     service_name: &str,
     level_arg: Option<&str>,
-) -> opentelemetry_sdk::trace::SdkTracerProvider {
-    let (tracer, provider) = init_tracer(service_name);
-    let telemetry = OpenTelemetryLayer::new(tracer);
+) -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
     let default_env_filter_directive = if cfg!(debug_assertions) {
         LevelFilter::INFO.into()
     } else {
@@ -31,16 +29,40 @@ pub fn init_telemetry(
         .parse(level_arg.unwrap_or(""))
         .unwrap();
     let timer_format = tracing_subscriber::fmt::time::LocalTime::rfc_3339();
-    let subscriber = Registry::default().with(env_filter).with(telemetry).with(
-        fmt::Layer::default()
-            .with_timer(timer_format.clone())
-            .with_ansi(true)
-            .with_test_writer(),
-    );
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("failed to install `tracing` subscriber");
+    let fmt_layer = fmt::Layer::default()
+        .with_timer(timer_format)
+        .with_ansi(true)
+        .with_test_writer();
 
-    provider
+    match std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT") {
+        Ok(endpoint) => info!("OTEL_EXPORTER_OTLP_ENDPOINT={}", endpoint),
+        Err(_) => {
+            info!("OTEL_EXPORTER_OTLP_ENDPOINT is empty. otel sdk is disabled");
+            let subscriber = Registry::default().with(env_filter).with(fmt_layer);
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("failed to install `tracing` subscriber");
+            return None;
+        }
+    };
+
+    match init_tracer(service_name) {
+        Ok((tracer, provider)) => {
+            let telemetry = OpenTelemetryLayer::new(tracer);
+            let subscriber = Registry::default().with(env_filter).with(telemetry);
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("failed to install `tracing` subscriber");
+
+            Some(provider)
+        }
+        Err(err) => {
+            eprintln!("OpenTelemetry disabled: {err}");
+
+            let subscriber = Registry::default().with(env_filter).with(fmt_layer);
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("failed to install `tracing` subscriber");
+            None
+        }
+    }
 }
 
 pub fn send_otel_connectivity_check() {
@@ -50,11 +72,12 @@ pub fn send_otel_connectivity_check() {
     span.end();
 }
 
-fn init_tracer(service_name: &str) -> (opentelemetry_sdk::trace::Tracer, SdkTracerProvider) {
+fn init_tracer(
+    service_name: &str,
+) -> anyhow::Result<(opentelemetry_sdk::trace::Tracer, SdkTracerProvider)> {
     let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
-        .build()
-        .expect("failed otel exporter build");
+        .build()?;
 
     let provider = SdkTracerProvider::builder()
         .with_resource(
@@ -66,5 +89,5 @@ fn init_tracer(service_name: &str) -> (opentelemetry_sdk::trace::Tracer, SdkTrac
         .build();
     global::set_tracer_provider(provider.clone());
 
-    (provider.tracer(service_name.to_owned()), provider)
+    Ok((provider.tracer(service_name.to_owned()), provider))
 }
