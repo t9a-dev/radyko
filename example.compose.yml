@@ -3,36 +3,14 @@ services:
     image: ghcr.io/t9a-dev/radyko:latest
     # build:
     #   context: .
-      # args:
-      #   - USER=radyko
-      #   - UID=1000
     command: ["recorder", "-c", "radyko.toml"]
     volumes:
       - ./radyko.toml:/app/radyko.toml
       - ./recorded:/app/recorded
     env_file:
       - .env
-    # environment:
-    #   - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
-    #   - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
     logging:
       driver: local
       options:
         max-file: '5'
         max-size: 10m
-
-  ## Opentelemetryの実験に利用
-  # otel-collector:
-  #   image: otel/opentelemetry-collector-contrib:latest
-  #   container_name: otel-collector
-  #   command: [ "--config=/etc/otel-collector-config.yaml" ]
-  #   volumes:
-  #     - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
-  #   ports:
-  #     - "4317:4317"
-
-  # jaeger:
-  #   image: jaegertracing/jaeger:latest
-  #   container_name: jaeger
-  #   ports:
-  #     - "16686:16686"
