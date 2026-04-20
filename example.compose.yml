@@ -6,9 +6,9 @@ services:
       # args:
       #   - USER=radyko
       #   - UID=1000
-    command: ["recorder", "-c", "config.toml"]
+    command: ["recorder", "-c", "radyko.toml"]
     volumes:
-      - ./config.toml:/app/config.toml
+      - ./radyko.toml:/app/radyko.toml
       - ./recorded:/app/recorded
     env_file:
       - .env
