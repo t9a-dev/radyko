@@ -5,9 +5,6 @@
 ####################################################################################################
 ## Build
 ####################################################################################################
-ARG USER=radyko
-ARG UID=1000
-
 FROM rust:alpine AS build
 
 RUN apk update && \
@@ -45,21 +42,21 @@ RUN apk update && \
 
 RUN update-ca-certificates
 
-ARG USER
-ARG UID
+ENV PUID=1000
+ENV PGID=1000
+ENV APP_USER=radyko
+ENV APP_GROUP=radyko
 
-ENV USER="${USER}"
-ENV UID="${UID}"
 RUN adduser \
     --disabled-password \
     --gecos "" \
     --home "/nonexistent" \
     --shell "/sbin/nologin" \
     --no-create-home \
-    --uid "${UID}" \
-    "${USER}" && \
+    --uid "${PUID}" \
+    "${APP_USER}" && \
     mkdir -p /app && \
-    chown -R "${UID}:${UID}" /app && \
+    chown -R "${PUID}:${PGID}" /app && \
     chown 755 /app
 
 
@@ -68,10 +65,10 @@ RUN adduser \
 ####################################################################################################
 FROM scratch
 
-ARG USER
-ARG UID
-ENV USER="${USER}"
-ENV UID="${UID}"
+ENV PUID=1000
+ENV PGID=1000
+ENV APP_USER=radyko
+ENV APP_GROUP=radyko
 
 # ここで明示的に/etcを--chmod=555としておかないと、次のCOPY --chmod=444により/etcに実行権限が付与されないことから探索できず、Permission Deniedエラーとなる
 # プログラム(radyko)で利用しているクレート(hickory-dns)が/etc/resolv.confを見に行くので、/etcを探索できる必要がある
@@ -93,13 +90,12 @@ COPY --from=files --chmod=444 /etc/timezone /etc/timezone
 COPY --from=files --chmod=444 /usr/share/zoneinfo /usr/share/zoneinfo
 
 # アプリケーションが作業するディレクトリのオーナーを明示的に指定してコピーすることで実行時に権限周りのエラーが発生しないようにしている
-COPY --from=files --chown="${UID}:${UID}" /app /app
+COPY --from=files --chown="${PUID}:${PUID}" /app /app
 
 # 実行バイナリのコピー
 COPY --from=build /radyko/target/release/radyko /bin/radyko
 
-# 実行ユーザーの指定
-USER ${USER}
+USER "${PUID}:${PGID}"
 
 WORKDIR /app
 
