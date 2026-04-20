@@ -3,5 +3,5 @@
 **/*.aac
 **/.DS_Store
 radyko_cache
-config.toml
+radyko.toml
 compose.yml

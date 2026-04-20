@@ -16,8 +16,8 @@ pub mod tests_common {
     /// Tokyo
     pub const TEST_AREA_ID: &str = "JP13";
     pub const TEST_STATION_ID: &str = "JOAK-FM";
-    pub const TEST_EMPTY_KEYWORDS_CONFIG_PATH: &str = "tests/fixtures/empty_keywords_config.toml";
-    pub const TEST_EMPTY_RULES_CONFIG_PATH: &str = "tests/fixtures/empty_rules_config.toml";
+    pub const TEST_EMPTY_KEYWORDS_CONFIG_PATH: &str = "tests/fixtures/empty_keywords_radyko.toml";
+    pub const TEST_EMPTY_RULES_CONFIG_PATH: &str = "tests/fixtures/empty_rules_radyko.toml";
 
     static RADIKO_CLIENT: tokio::sync::OnceCell<RadikoClient> = OnceCell::const_new();
 

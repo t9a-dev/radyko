@@ -27,13 +27,13 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 指定した設定ファイルに基づいて録音プログラムを起動 ex: radyko recorder -c config.toml
+    /// 指定した設定ファイルに基づいて録音プログラムを起動 ex: radyko recorder -c radyko.toml
     Recorder(RecorderArgs),
-    /// 指定した設定ファイルのルールに一致する番組の確認 ex: radyko rule -c config.toml
+    /// 指定した設定ファイルのルールに一致する番組の確認 ex: radyko rule -c radyko.toml
     Rule(RuleArgs),
     /// 番組の検索 ex: radyko search -k "オールナイトニッポン" -s "LFR"
     Search(SearchArgs),
-    /// 設定ファイル例の出力 ex: radyko init > example.config.toml
+    /// 設定ファイル例の出力 ex: radyko init > example.radyko.toml
     Init,
 }
 
