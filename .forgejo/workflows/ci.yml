@@ -1,0 +1,32 @@
+# https://github.com/actions/starter-workflows/blob/main/ci/rust.yml
+name: CI for Forgejo
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      RADIKO_AREA_FREE_MAIL: ${{ secrets.RADIKO_AREA_FREE_MAIL }}
+      RADIKO_AREA_FREE_PASSWORD: ${{ secrets.RADIKO_AREA_FREE_PASSWORD }}
+
+    steps:
+    - name: Random delay
+      run: |
+        sleep $((RANDOM % 3600))  # 0〜3599秒ランダム待機
+    - uses: actions/checkout@v6
+    - name: Build
+      run: cargo build --verbose
+    # セルフホストしているForgejoでradiko WebAPIを利用するテストも含めて実行する
+    - name: Run tests
+      run: cargo test --verbose -- --include-ignored
