@@ -957,7 +957,7 @@ dependencies = [
  "hex",
  "shorthand",
  "stable-vec",
- "strum 0.26.3",
+ "strum",
  "thiserror 1.0.69",
 ]
 
@@ -1021,7 +1021,7 @@ dependencies = [
  "http",
  "http-cache",
  "http-cache-semantics",
- "reqwest 0.12.28",
+ "reqwest",
  "reqwest-middleware",
  "serde",
  "url",
@@ -1620,7 +1620,7 @@ dependencies = [
  "bytes",
  "http",
  "opentelemetry",
- "reqwest 0.12.28",
+ "reqwest",
 ]
 
 [[package]]
@@ -1635,7 +1635,7 @@ dependencies = [
  "opentelemetry-proto",
  "opentelemetry_sdk",
  "prost",
- "reqwest 0.12.28",
+ "reqwest",
  "thiserror 2.0.18",
  "tokio",
  "tonic",
@@ -1984,16 +1984,14 @@ dependencies = [
  "quick-xml",
  "rand 0.10.1",
  "regex",
- "reqwest 0.12.28",
+ "reqwest",
  "reqwest-middleware",
- "reqwest_cookie_store",
  "sanitise-file-name",
  "secrecy",
  "serde",
  "serde_derive",
  "serde_json",
  "serde_with",
- "strum 0.28.0",
  "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
@@ -2184,37 +2182,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reqwest"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "cookie",
- "cookie_store",
- "futures-core",
- "http",
- "http-body",
- "http-body-util",
- "hyper",
- "hyper-util",
- "js-sys",
- "log",
- "percent-encoding",
- "pin-project-lite",
- "sync_wrapper",
- "tokio",
- "tower",
- "tower-http",
- "tower-service",
- "url",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
 name = "reqwest-middleware"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2223,22 +2190,10 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http",
- "reqwest 0.12.28",
+ "reqwest",
  "serde",
  "thiserror 1.0.69",
  "tower-service",
-]
-
-[[package]]
-name = "reqwest_cookie_store"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "beb98c4d52ae6ceed18a0dff0564717623dd75fae08619ae0927332f0a81abbc"
-dependencies = [
- "bytes",
- "cookie_store",
- "reqwest 0.13.2",
- "url",
 ]
 
 [[package]]
@@ -2629,12 +2584,6 @@ checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
  "strum_macros 0.26.4",
 ]
-
-[[package]]
-name = "strum"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
 
 [[package]]
 name = "strum_macros"
