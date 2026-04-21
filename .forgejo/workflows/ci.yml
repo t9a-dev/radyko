@@ -17,8 +17,6 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      RADIKO_AREA_FREE_MAIL: ${{ secrets.RADIKO_AREA_FREE_MAIL }}
-      RADIKO_AREA_FREE_PASSWORD: ${{ secrets.RADIKO_AREA_FREE_PASSWORD }}
 
     steps:
     # - name: Random delay
@@ -35,4 +33,7 @@ jobs:
       run: cargo build --verbose
     # セルフホストしているForgejoでradiko WebAPIを利用するテストも含めて実行する
     - name: Run tests
+      env:
+        RADIKO_AREA_FREE_MAIL: "${{ secrets.RADIKO_AREA_FREE_MAIL }}"
+        RADIKO_AREA_FREE_PASSWORD: "${{ secrets.RADIKO_AREA_FREE_PASSWORD }}"
       run: cargo test --verbose -- --include-ignored
