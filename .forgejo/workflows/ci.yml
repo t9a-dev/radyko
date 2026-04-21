@@ -36,4 +36,4 @@ jobs:
       env:
         RADIKO_AREA_FREE_MAIL: "${{ secrets.RADIKO_AREA_FREE_MAIL }}"
         RADIKO_AREA_FREE_PASSWORD: "${{ secrets.RADIKO_AREA_FREE_PASSWORD }}"
-      run: cargo test --verbose -- --include-ignored
+      run: cargo test --verbose -- --include-ignored --show-output --test-threads=1
