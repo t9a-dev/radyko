@@ -25,6 +25,7 @@ jobs:
       run: |
         sleep $((RANDOM % 3600))  # 0〜3599秒ランダム待機
     - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@stable
     - name: Build
       run: cargo build --verbose
     # セルフホストしているForgejoでradiko WebAPIを利用するテストも含めて実行する
