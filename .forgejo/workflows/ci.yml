@@ -19,9 +19,9 @@ jobs:
       CARGO_TERM_COLOR: always
 
     steps:
-    # - name: Random delay
-    #   run: |
-    #     sleep $((RANDOM % 3600))  # 0〜3599秒ランダム待機
+    - name: Random delay
+      run: |
+        sleep $((RANDOM % 3600))  # 0〜3599秒ランダム待機
     - uses: actions/checkout@v6
     - name: Install Dependecies
       run: |
