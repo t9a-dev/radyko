@@ -21,10 +21,14 @@ jobs:
       RADIKO_AREA_FREE_PASSWORD: ${{ secrets.RADIKO_AREA_FREE_PASSWORD }}
 
     steps:
-    - name: Random delay
-      run: |
-        sleep $((RANDOM % 3600))  # 0〜3599秒ランダム待機
+    # - name: Random delay
+    #   run: |
+    #     sleep $((RANDOM % 3600))  # 0〜3599秒ランダム待機
     - uses: actions/checkout@v6
+    - name: Install Dependecies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential
     - name: Build
       run: cargo build --verbose
     # セルフホストしているForgejoでradiko WebAPIを利用するテストも含めて実行する
