@@ -31,6 +31,12 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 ####################################################################################################
 FROM alpine:latest AS files
 
+ENV TZ=Asia/Tokyo
+ENV PUID=1000
+ENV PGID=1000
+ENV APP_USER=radyko
+ENV APP_GROUP=radyko
+
 # mailcap is used for content type (MIME type) detection
 # tzdata is used for timezone info
 RUN apk update && \
@@ -38,14 +44,9 @@ RUN apk update && \
     apk add --no-cache ca-certificates mailcap tzdata && \
     cp /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
     # タイムゾーンを日本に固定
-    echo "Asia/Tokyo" > /etc/timezone
+    echo "${TZ}" > /etc/timezone
 
 RUN update-ca-certificates
-
-ENV PUID=1000
-ENV PGID=1000
-ENV APP_USER=radyko
-ENV APP_GROUP=radyko
 
 RUN adduser \
     --disabled-password \
@@ -65,6 +66,7 @@ RUN adduser \
 ####################################################################################################
 FROM scratch
 
+ENV TZ=Asia/Tokyo
 ENV PUID=1000
 ENV PGID=1000
 ENV APP_USER=radyko
