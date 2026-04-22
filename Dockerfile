@@ -75,7 +75,8 @@ ENV APP_GROUP=radyko
 # ここで明示的に/etcを--chmod=555としておかないと、次のCOPY --chmod=444により/etcに実行権限が付与されないことから探索できず、Permission Deniedエラーとなる
 # プログラム(radyko)で利用しているクレート(hickory-dns)が/etc/resolv.confを見に行くので、/etcを探索できる必要がある
 # https://docs.rs/hickory-resolver/0.26.0/hickory_resolver/system_conf/
-COPY --from=files --chmod=555 /etc /etc
+COPY --from=files --chmod=555 /etc/ /etc/
+COPY --from=files --chmod=555 /usr/share/zoneinfo/ /usr/share/zoneinfo/
 
 # /etc/nsswitch.conf may be used by some DNS resolvers
 # /etc/mime.types may be used to detect the MIME type of files
@@ -86,19 +87,19 @@ COPY --from=files --chmod=444 \
     /etc/mime.types \
     /etc/
 
-COPY --from=files --chmod=444 /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=files --chmod=444 /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=files --chmod=444 /etc/localtime /etc/localtime
 COPY --from=files --chmod=444 /etc/timezone /etc/timezone
-COPY --from=files --chmod=444 /usr/share/zoneinfo /usr/share/zoneinfo
 
 # アプリケーションが作業するディレクトリのオーナーを明示的に指定してコピーすることで実行時に権限周りのエラーが発生しないようにしている
-COPY --from=files --chown="${PUID}:${PUID}" /app /app
+COPY --from=files --chown="${PUID}:${PGID}" /app /app
 
 # 実行バイナリのコピー
-COPY --from=build /radyko/target/release/radyko /bin/radyko
+COPY --from=build --chown="${PUID}:${PGID}" /radyko/target/release/radyko /bin/radyko
 
 USER "${PUID}:${PGID}"
 
 WORKDIR /app
 
 ENTRYPOINT ["/bin/radyko"]
+CMD [ "--help" ]
