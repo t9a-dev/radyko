@@ -38,14 +38,18 @@ mod recording_program_test {
             recording_config,
         ));
         let now = Utc::now().with_timezone(&Tokyo);
-        // 今放送している適当な番組を30秒録音
-        let test_reserve_program = now_on_air_programs[0]
-            .with_start_end_time(now, now.checked_add_signed(TimeDelta::seconds(5)).unwrap());
+        let recording_duration_secs = 5;
+        // 今放送している適当な番組を録音
+        let test_reserve_program = now_on_air_programs[0].with_start_end_time(
+            now,
+            now.checked_add_signed(TimeDelta::seconds(recording_duration_secs))
+                .unwrap(),
+        );
         program_reserver.reserve(test_reserve_program).await?;
 
-        // 別スレッドで立ち上げた録音用のffmpegプロセスが実行されるのを待つ。
-        // 適当な時間スリープしないと先にメインスレッドが終了してしまいffmpegが立ち上がらない。
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        // バックグラウンドで録音処理が実行される時間待機
+        // 録音処理でエラーが発生しないことのみを検証
+        tokio::time::sleep(Duration::from_secs(recording_duration_secs as u64)).await;
 
         Ok(())
     }
