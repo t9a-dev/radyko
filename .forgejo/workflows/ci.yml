@@ -19,18 +19,14 @@ jobs:
       CARGO_TERM_COLOR: always
 
     steps:
-    - name: Random delay
-      run: |
-        sleep $((RANDOM % 3600))  # 0〜3599秒ランダム待機
     - uses: actions/checkout@v6
-    - name: Install Dependecies
-      run: |
-        sudo apt update
-        sudo apt install -y build-essential
     - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 # v1
     - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
     - name: Build
       run: cargo build --verbose
+    - name: Random delay
+      run: |
+        sleep $((RANDOM % 1800))  # 0〜1799秒ランダム待機
     # セルフホストしているForgejoでradiko WebAPIを利用するテストも含めて実行する
     - name: Run tests
       env:
