@@ -8,7 +8,7 @@ use tracing::{Instrument, error, trace};
 use crate::{
     app::{
         config::{RecordingConfig, RecordingDurationBufferConfig},
-        recording::{self, RetryWithBackOffPolicy},
+        recording::{self},
     },
     model::program::{Program, Seconds},
     radiko::RadikoClient,
@@ -140,11 +140,6 @@ impl ProgramReserver {
             self.inner.config.output_dir.clone(),
             self.inner.config.duration_buffer_secs.clone(),
         ));
-        let retry_policy = RetryWithBackOffPolicy {
-            max_attempts: 5,
-            base_delay: Duration::from_secs(1),
-            max_delay: Duration::from_secs(10),
-        };
 
         // 録音予約はspawnしてawaitせず、そのまま任せる。
         let this = self.clone();
@@ -161,9 +156,7 @@ impl ProgramReserver {
                 if let Err(e) = tokio::fs::create_dir_all(program.output_dir()).await {
                     error!("create recording dir error: {:#?}", e)
                 };
-                if let Err(e) =
-                    recording::start(refreshed_radiko_client, program, retry_policy).await
-                {
+                if let Err(e) = recording::start(refreshed_radiko_client, program).await {
                     error!("recording error: {:#?}", e);
                 };
             }
