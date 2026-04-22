@@ -27,8 +27,8 @@ jobs:
       run: |
         sudo apt update
         sudo apt install -y build-essential
-    - uses: rui314/setup-mold@v1
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: rui314/setup-mold@9c9c13bf4c3f1adef0cc596abc155580bcb04444 #v1
+    - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 #stable
     - name: Build
       run: cargo build --verbose
     # セルフホストしているForgejoでradiko WebAPIを利用するテストも含めて実行する
