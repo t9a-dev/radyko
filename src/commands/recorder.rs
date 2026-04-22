@@ -6,11 +6,12 @@ use std::{
     io::{BufWriter, Write},
     sync::Arc,
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 // 構造体の内容がまるごと表示されてノイズになるので出力対象外にしている。skip(recorder_state)
 #[tracing::instrument(name = "cli_command_recorder" skip(recorder_state))]
 pub async fn run(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
+    info!("local now: {}", chrono::Local::now());
     let program_selectors = collect_program_selectors(&recorder_state.config().read().unwrap())?;
     let programs = resolve_programs(recorder_state.app_state(), program_selectors).await?;
 
