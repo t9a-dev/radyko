@@ -1,9 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
-use tracing::{Instrument, info, trace};
+use tracing::{info, trace};
 
 use crate::{
-    app::{hls::StreamHandler, program_reserver::ReserveProgram, utils::Utils},
+    app::{hls::StreamHandler, program_reserver::ReserveProgram},
     radiko::RadikoClient,
 };
 
@@ -16,19 +16,8 @@ pub struct RetryWithBackOffPolicy {
 pub async fn start(
     radiko_client: RadikoClient,
     program: Arc<ReserveProgram>,
-    retry_policy: RetryWithBackOffPolicy,
 ) -> anyhow::Result<()> {
-    Utils::retry_with_backoff(
-        || {
-            async { recording_with_stream_handler(&radiko_client, Arc::clone(&program)).await }
-                .in_current_span()
-        },
-        retry_policy.max_attempts,
-        retry_policy.base_delay,
-        retry_policy.max_delay,
-    )
-    .await?;
-
+    recording_with_stream_handler(&radiko_client, Arc::clone(&program)).await?;
     Ok(())
 }
 
