@@ -15,7 +15,7 @@ RUN apk update && \
 # 先に空のプロジェクトを作成して依存関係のビルドのみを済ませておいてキャッシュする
 RUN cargo new --bin radyko
 WORKDIR /radyko
-COPY Cargo.toml Cargo.lock .cargo/ ./
+COPY Cargo.toml Cargo.lock ./
 RUN cargo build --release && rm src/*.rs
 
 # 自分のソースコードをコピーしてビルドする
@@ -23,6 +23,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
+    RUSTFLAGS="-C link-arg=-fuse-ld=mold" \
     cargo build --release
 
 
