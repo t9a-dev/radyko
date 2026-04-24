@@ -143,7 +143,7 @@ jobs:
           "artifact_path=$Dst" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload single binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.prepare_unix.outputs.artifact_name || steps.prepare_windows.outputs.artifact_name }}
           path: ${{ steps.prepare_unix.outputs.artifact_path || steps.prepare_windows.outputs.artifact_path }}
