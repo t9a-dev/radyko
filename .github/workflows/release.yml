@@ -73,15 +73,26 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install cross
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && runner.arch == 'X64'
         uses: taiki-e/install-action@v2
         with:
           tool: cross
 
-      - name: Build release Linux musl
-        if: runner.os == 'Linux'
+      - name: Install musl tools
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build release Linux x64 musl
+        if: runner.os == 'Linux' && runner.arch == 'X64'
         run: |
           cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Build release Linux arm64 musl
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Build release
         if: runner.os != 'Linux'
