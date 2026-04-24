@@ -5,5 +5,4 @@
 # クレデンシャル系を含めるような事故が起こりにくいかなという気持ち
 !Cargo.lock
 !Cargo.toml
-!.cargo/
 !src/
