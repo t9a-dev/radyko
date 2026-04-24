@@ -10,6 +10,7 @@ on:
     paths:
       - "**/*.rs"
       - "Dockerfile"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
