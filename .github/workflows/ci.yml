@@ -1,5 +1,5 @@
 # https://github.com/actions/starter-workflows/blob/main/ci/rust.yml
-name: Cargo Build & Test
+name: Build & Test
 
 on:
   push:
@@ -22,3 +22,15 @@ jobs:
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
+
+  build-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag radyko:ci \
+            .
+      - name: Smoke test Docker image
+        run: |
+          docker run --rm radyko:ci --version
