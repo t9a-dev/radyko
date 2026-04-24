@@ -3,9 +3,13 @@ name: Build & Test
 
 on:
   push:
-    branches: [main]
+    paths:
+      - "**/*.rs"
+      - "Dockerfile"
   pull_request:
-    branches: [main]
+    paths:
+      - "**/*.rs"
+      - "Dockerfile"
 
 env:
   CARGO_TERM_COLOR: always
