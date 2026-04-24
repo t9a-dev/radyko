@@ -173,7 +173,7 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: radyko_${{ env.VERSION }}_${{ matrix.arch_name }}${{ matrix.bin_ext }}
           path: artifacts
