@@ -1,19 +1,13 @@
-use std::io::{self, BufWriter, Write};
+use std::{
+    io::{self, BufWriter, Write},
+    sync::Arc,
+};
 
-use secrecy::ExposeSecret;
-
-use crate::{app::credential::RadikoCredential, cli::SearchArgs, radiko::RadikoClient};
+use crate::{app::state, cli::SearchArgs, radiko::RadikoClient};
 
 #[tracing::instrument(name = "cli_command_search")]
 pub async fn run(args: SearchArgs) -> anyhow::Result<()> {
-    let radiko_credential = RadikoCredential::load_credential();
-    let radiko_client = match radiko_credential {
-        Some(c) => {
-            RadikoClient::new_area_free(c.email_address.expose_secret(), c.password.expose_secret())
-                .await?
-        }
-        None => RadikoClient::new().await?,
-    };
+    let radiko_client = RadikoClient::new(Arc::new(state::AppState::http_cache_dir()?)).await?;
     let programs = radiko_client
         .search_programs(args.keyword, args.station_id.as_deref())
         .await?

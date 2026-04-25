@@ -8,12 +8,17 @@ pub mod telemetry;
 
 #[cfg(test)]
 pub mod test_helper {
+    use std::sync::Arc;
+
     use reqwest::Client;
     use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
     use secrecy::ExposeSecret;
     use tokio::sync::{self, OnceCell};
 
-    use crate::{app::credential::RadikoCredential, radiko::RadikoClient};
+    use crate::{
+        app::{credential::RadikoCredential, state},
+        radiko::RadikoClient,
+    };
 
     static CLIENT: std::sync::OnceLock<ClientWithMiddleware> = std::sync::OnceLock::new();
     static RADIKO_CLIENT: sync::OnceCell<RadikoClient> = OnceCell::const_new();
@@ -25,7 +30,11 @@ pub mod test_helper {
 
     pub async fn radiko_client() -> &'static RadikoClient {
         RADIKO_CLIENT
-            .get_or_init(|| async { RadikoClient::new().await.unwrap() })
+            .get_or_init(|| async {
+                RadikoClient::new(Arc::new(state::AppState::http_cache_dir().unwrap()))
+                    .await
+                    .unwrap()
+            })
             .await
     }
 
@@ -36,6 +45,7 @@ pub mod test_helper {
                 RadikoClient::new_area_free(
                     credential.email_address.expose_secret(),
                     credential.password.expose_secret(),
+                    Arc::new(state::AppState::http_cache_dir().unwrap()),
                 )
                 .await
                 .unwrap()
