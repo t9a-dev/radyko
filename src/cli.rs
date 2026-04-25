@@ -1,12 +1,9 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use anyhow::bail;
 use clap::{Args, Parser, Subcommand};
-use tracing::{error, info};
 
 use crate::app::config::{self};
-use crate::app::state::{AppState, RecorderState};
-use crate::app::utils::Utils;
 use crate::commands::{recorder, rule, search};
 use crate::telemetry::{init_telemetry, send_otel_connectivity_check};
 
@@ -76,26 +73,8 @@ pub async fn run() -> anyhow::Result<()> {
 
     match cli.command {
         Some(Commands::Recorder(args)) => {
-            let app_state = Arc::new(AppState::build_from_recorder_args(args.clone()).await?);
-            Utils::is_writable_output_dir(app_state.output_dir().to_str().unwrap());
-
-            let recorder_state = Arc::new(RecorderState::new(Arc::clone(&app_state)));
-            let mut reserve_schedule_update_interval = tokio::time::interval(
-                tokio::time::Duration::from_secs(recorder_state.schedule_update_interval_secs()),
-            );
-            // 最初のtick()は即座に完了する
-            reserve_schedule_update_interval.tick().await;
-
-            loop {
-                match recorder::run(Arc::clone(&recorder_state)).await {
-                    Ok(_) => info!("recorder run success"),
-                    Err(e) => error!("recorder error: {:#?}", e),
-                }
-                reserve_schedule_update_interval.tick().await;
-                if let Err(e) = recorder_state.reload_config(args.config.config_path.clone()) {
-                    error!("error reload config: {:#?}", e);
-                }
-            }
+            let _ = recorder::run(args).await;
+            Ok(())
         }
         Some(Commands::Rule(args)) => rule::run(args).await,
         Some(Commands::Search(args)) => search::run(args).await,
