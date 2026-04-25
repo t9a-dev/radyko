@@ -80,20 +80,21 @@ pub async fn run() -> anyhow::Result<()> {
             Utils::is_writable_output_dir(app_state.output_dir().to_str().unwrap());
 
             let recorder_state = Arc::new(RecorderState::new(Arc::clone(&app_state)));
-            loop {
-                let mut reserve_schedule_update_interval =
-                    tokio::time::interval(tokio::time::Duration::from_secs(
-                        recorder_state.schedule_update_interval_secs(),
-                    ));
-                // 最初のtick()は即座に完了する
-                reserve_schedule_update_interval.tick().await;
+            let mut reserve_schedule_update_interval = tokio::time::interval(
+                tokio::time::Duration::from_secs(recorder_state.schedule_update_interval_secs()),
+            );
+            // 最初のtick()は即座に完了する
+            reserve_schedule_update_interval.tick().await;
 
+            loop {
                 match recorder::run(Arc::clone(&recorder_state)).await {
                     Ok(_) => info!("recorder run success"),
                     Err(e) => error!("recorder error: {:#?}", e),
                 }
                 reserve_schedule_update_interval.tick().await;
-                recorder_state.reload_config(args.config.config_path.clone())?;
+                if let Err(e) = recorder_state.reload_config(args.config.config_path.clone()) {
+                    error!("error reload config: {:#?}", e);
+                }
             }
         }
         Some(Commands::Rule(args)) => rule::run(args).await,
