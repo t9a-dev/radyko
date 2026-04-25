@@ -84,7 +84,7 @@ impl AppState {
     }
 
     pub fn http_cache_dir() -> anyhow::Result<TempDir> {
-        Ok(TempDir::with_prefix("radyko_http_cache-")?)
+        Ok(TempDir::new_in(".")?)
     }
 }
 
