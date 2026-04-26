@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::model::program::Programs;
 use crate::radiko::xml::program::RadikoProgramXml;
 use anyhow::{Context, Result};
-use reqwest_middleware::ClientWithMiddleware;
 
 use crate::radiko::api::endpoint::Endpoint;
 
@@ -14,11 +13,11 @@ pub struct RadikoProgram {
 
 #[derive(Debug)]
 struct RadikoProgramRef {
-    client: ClientWithMiddleware,
+    client: reqwest::Client,
 }
 
 impl RadikoProgram {
-    pub fn new(client: ClientWithMiddleware) -> Self {
+    pub fn new(client: reqwest::Client) -> Self {
         Self {
             inner: Arc::new(RadikoProgramRef { client }),
         }

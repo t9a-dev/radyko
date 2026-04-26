@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
 use reqwest::Client;
-use reqwest_middleware::ClientBuilder;
-use tempfile::TempDir;
 
 use crate::{
     model::program::{Program, Programs},
@@ -27,25 +24,23 @@ struct RadikoClientRef {
     stream: RadikoStream,
     program: RadikoProgram,
     search: RadikoSearch,
-    http_cache_dir: Arc<TempDir>,
 }
 
 impl RadikoClient {
     pub async fn new_area_free(
         email_address: &str,
         password: &str,
-        http_cache_dir: Arc<TempDir>,
     ) -> anyhow::Result<RadikoClient> {
-        Self::init(Some(email_address), Some(password), http_cache_dir).await
+        Self::init(Some(email_address), Some(password)).await
     }
 
-    pub async fn new(http_cache_dir: Arc<TempDir>) -> anyhow::Result<RadikoClient> {
-        Self::init(None, None, http_cache_dir).await
+    pub async fn new() -> anyhow::Result<RadikoClient> {
+        Self::init(None, None).await
     }
 
     pub async fn refresh_auth(&self) -> anyhow::Result<RadikoClient> {
         let refreshed_auth = self.inner.auth.refresh_auth().await?;
-        let inner = Self::build_inner(refreshed_auth, Arc::clone(&self.inner.http_cache_dir));
+        let inner = Self::build_inner(refreshed_auth);
 
         Ok(Self {
             default_area_id: Arc::new(inner.auth.area_id().to_string()),
@@ -103,12 +98,8 @@ impl RadikoClient {
             .await
     }
 
-    async fn init(
-        email_address: Option<&str>,
-        password: Option<&str>,
-        http_cache_dir: Arc<TempDir>,
-    ) -> anyhow::Result<Self> {
-        let inner = Self::init_inner(email_address, password, http_cache_dir).await?;
+    async fn init(email_address: Option<&str>, password: Option<&str>) -> anyhow::Result<Self> {
+        let inner = Self::init_inner(email_address, password).await?;
 
         Ok(Self {
             default_area_id: Arc::new(inner.auth.area_id().to_string()),
@@ -119,7 +110,6 @@ impl RadikoClient {
     async fn init_inner(
         email_address: Option<&str>,
         password: Option<&str>,
-        http_cache_dir: Arc<TempDir>,
     ) -> anyhow::Result<RadikoClientRef> {
         let is_area_free = email_address.is_some() && password.is_some();
         let radiko_auth = if is_area_free {
@@ -128,24 +118,17 @@ impl RadikoClient {
             RadikoAuth::new().await
         };
 
-        Ok(Self::build_inner(radiko_auth, http_cache_dir))
+        Ok(Self::build_inner(radiko_auth))
     }
 
-    fn build_inner(radiko_auth: RadikoAuth, http_cache_dir: Arc<TempDir>) -> RadikoClientRef {
-        let client = ClientBuilder::new(Client::new())
-            .with(Cache(HttpCache {
-                mode: CacheMode::Default,
-                manager: CACacheManager::new(http_cache_dir.path().into(), false),
-                options: HttpCacheOptions::default(),
-            }))
-            .build();
+    fn build_inner(radiko_auth: RadikoAuth) -> RadikoClientRef {
+        let client = Client::new();
 
         RadikoClientRef {
             auth: radiko_auth.clone(),
             stream: RadikoStream::new(radiko_auth.clone()),
             program: RadikoProgram::new(client.clone()),
             search: RadikoSearch::new(client.clone()),
-            http_cache_dir,
         }
     }
 }

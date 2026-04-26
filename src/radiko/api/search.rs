@@ -1,4 +1,3 @@
-use reqwest_middleware::ClientWithMiddleware;
 use serde_derive::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use strum_macros::{AsRefStr, Display};
@@ -16,11 +15,11 @@ pub enum SearchConditionError {
 
 #[derive(Debug, Clone)]
 pub struct RadikoSearch {
-    client: ClientWithMiddleware,
+    client: reqwest::Client,
 }
 
 impl RadikoSearch {
-    pub fn new(client: ClientWithMiddleware) -> Self {
+    pub fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
     pub async fn find_program(&self, condition: &RadikoSearchCondition) -> Result<Programs> {
