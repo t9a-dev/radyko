@@ -32,7 +32,6 @@ impl AppState {
     }
 
     pub async fn build_from_recorder_args(args: RecorderArgs) -> anyhow::Result<Self> {
-        let http_cache_dir = Arc::new(Self::http_cache_dir()?);
         let radyko_config = RadykoConfig::parse_from_path(args.config.config_path)?;
         let radiko_credential = RadikoCredential::load_credential();
         let radiko_client = match radiko_credential {
@@ -40,17 +39,15 @@ impl AppState {
                 RadikoClient::new_area_free(
                     c.email_address.expose_secret(),
                     c.password.expose_secret(),
-                    http_cache_dir,
                 )
                 .await?
             }
-            None => RadikoClient::new(http_cache_dir).await?,
+            None => RadikoClient::new().await?,
         };
         Self::new(radyko_config, radiko_client).await
     }
 
     pub async fn build_from_rule_args(args: RuleArgs) -> anyhow::Result<Self> {
-        let http_cache_dir = Arc::new(Self::http_cache_dir()?);
         let radyko_config = RadykoConfig::parse_from_path(args.config.config_path)?;
         let radiko_credential = RadikoCredential::load_credential();
         let radiko_client = match radiko_credential {
@@ -58,11 +55,10 @@ impl AppState {
                 RadikoClient::new_area_free(
                     c.email_address.expose_secret(),
                     c.password.expose_secret(),
-                    http_cache_dir,
                 )
                 .await?
             }
-            None => RadikoClient::new(http_cache_dir).await?,
+            None => RadikoClient::new().await?,
         };
         Self::new(radyko_config, radiko_client).await
     }

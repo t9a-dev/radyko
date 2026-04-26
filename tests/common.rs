@@ -4,13 +4,11 @@
 pub mod tests_common {
     use std::io::BufReader;
     use std::io::Cursor;
-    use std::sync::Arc;
 
     use chrono::DateTime;
     use chrono_tz::Tz;
 
     use radyko::app::config;
-    use radyko::app::state;
     use radyko::model::Program;
     use radyko::{app::config::RadykoConfig, radiko::RadikoClient};
     use tokio::sync::OnceCell;
@@ -32,11 +30,7 @@ pub mod tests_common {
 
     pub async fn radiko_client() -> &'static RadikoClient {
         RADIKO_CLIENT
-            .get_or_init(|| async {
-                RadikoClient::new(Arc::new(state::AppState::http_cache_dir().unwrap()))
-                    .await
-                    .unwrap()
-            })
+            .get_or_init(|| async { RadikoClient::new().await.unwrap() })
             .await
     }
 

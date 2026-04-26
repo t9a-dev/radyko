@@ -10,7 +10,6 @@ pub use client::RadikoClient;
 mod test_helper {
     use anyhow::Context;
     use reqwest::Client;
-    use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
     use secrecy::ExposeSecret;
 
     use crate::{
@@ -32,13 +31,13 @@ mod test_helper {
         tokio::sync::OnceCell::const_new();
     static RADIKO_STREAM: tokio::sync::OnceCell<RadikoStream> = tokio::sync::OnceCell::const_new();
     // std::sync
-    static CLIENT: std::sync::OnceLock<ClientWithMiddleware> = std::sync::OnceLock::new();
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     static RADIKO_STATION: std::sync::OnceLock<RadikoStation> = std::sync::OnceLock::new();
     static RADIKO_SEARCH: std::sync::OnceLock<RadikoSearch> = std::sync::OnceLock::new();
     static RADIKO_PROGRAM: std::sync::OnceLock<RadikoProgram> = std::sync::OnceLock::new();
 
-    pub fn reqwest_client() -> &'static ClientWithMiddleware {
-        CLIENT.get_or_init(|| ClientBuilder::new(Client::new()).build())
+    pub fn reqwest_client() -> &'static reqwest::Client {
+        CLIENT.get_or_init(|| Client::new())
     }
 
     pub async fn radiko_auth(auth_type: AuthType) -> &'static RadikoAuth {
