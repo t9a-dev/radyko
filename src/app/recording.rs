@@ -13,28 +13,30 @@ pub struct RetryWithBackOffPolicy {
     pub max_delay: Duration,
 }
 
-pub async fn start(
+pub async fn start_for_live(
     radiko_client: RadikoClient,
     program: Arc<ReserveProgram>,
 ) -> anyhow::Result<()> {
-    recording_with_stream_handler(&radiko_client, Arc::clone(&program)).await?;
+    recording_for_live(&radiko_client, Arc::clone(&program)).await?;
     Ok(())
 }
 
-async fn recording_with_stream_handler(
+async fn recording_for_live(
     radiko_client: &RadikoClient,
     program: Arc<ReserveProgram>,
 ) -> anyhow::Result<()> {
     let program_info = program.get_info();
     let on_air_duration = program.on_air_duration();
     trace!(
-        "stream handler recording: on_air_duration_secs: {:#?}, program: {}",
+        "recording for live: on_air_duration_secs: {:#?}, program: {}",
         on_air_duration, program_info
     );
 
-    let media_list_url = radiko_client.media_list_url(&program.station_id()).await?;
+    let media_list_url = radiko_client
+        .media_list_url_for_live(&program.station_id())
+        .await?;
     let stream_handler = StreamHandler::new(reqwest::Client::new(), media_list_url);
-    info!("start recording with stream handler: {}", program_info);
+    info!("start recording for live: {}", program_info);
     stream_handler
         .start_recording(
             program.output_dir(),

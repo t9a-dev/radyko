@@ -156,7 +156,7 @@ impl ProgramReserver {
                 if let Err(e) = tokio::fs::create_dir_all(program.output_dir()).await {
                     error!("create recording dir error: {:#?}", e)
                 };
-                if let Err(e) = recording::start(refreshed_radiko_client, program).await {
+                if let Err(e) = recording::start_for_live(refreshed_radiko_client, program).await {
                     error!("recording error: {:#?}", e);
                 };
             }

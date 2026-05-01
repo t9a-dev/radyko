@@ -9,12 +9,19 @@ pub struct Seconds(pub u64);
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 /// 番組情報が一意になる値を返す。録音予約済み判定に利用。
-pub struct ProgramId(pub String);
+pub struct ProgramId(pub StationId, pub StartAt, pub EndAt);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Programs {
     pub data: Vec<Program>,
 }
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct StationId(pub String);
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct StartAt(pub DateTime<Tz>);
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct EndAt(pub DateTime<Tz>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Program {
@@ -63,7 +70,11 @@ impl Program {
     }
 
     pub fn program_id(&self) -> ProgramId {
-        ProgramId(format!("{}_{}", self.station_id, self.start_time))
+        ProgramId(
+            StationId(self.station_id.clone()),
+            StartAt(self.start_time),
+            EndAt(self.end_time),
+        )
     }
 
     pub fn get_info(&self) -> String {

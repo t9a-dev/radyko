@@ -53,6 +53,7 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
     time::Instant,
 };
+use tokio_stream::StreamExt;
 use tracing::{Instrument, error, info, info_span, trace, warn};
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,21 @@ pub struct StreamHandler {
 struct StreamHandlerRef {
     client: reqwest::Client,
     media_list_url: String,
+}
+
+#[derive(Debug)]
+struct AudioSegment {
+    sequence: usize,
+    audio_bytes: Bytes,
+}
+
+impl AudioSegment {
+    pub fn new(sequence: usize, audio_bytes: Bytes) -> Self {
+        Self {
+            sequence,
+            audio_bytes,
+        }
+    }
 }
 
 impl StreamHandler {
@@ -109,6 +125,88 @@ impl StreamHandler {
         }
 
         Ok(())
+    }
+
+    pub async fn download_timefree_program(
+        &self,
+        media_list_urls: Vec<String>,
+        output_dir: PathBuf,
+        file_name: &str,
+    ) -> anyhow::Result<()> {
+        // medialistのmediasequence_segmentsequenceとして並び替え可能な音声セグメントを取得する
+        // 全てダウンロードしたら並び替えて一ファイルに結合する
+        let mut audio_segments: Vec<AudioSegment> = Vec::new();
+        let mut media_list_urls = tokio_stream::iter(media_list_urls);
+        while let Some(media_list_url) = media_list_urls.next().await {
+            audio_segments.extend(self.collect_audio_segments(media_list_url.as_str()).await?);
+        }
+        audio_segments.sort_by_key(|a| a.sequence);
+
+        tokio::fs::create_dir_all(output_dir.clone()).await?;
+        let mut file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .write(true)
+            .open(Path::new(&output_dir).join(file_name))
+            .await?;
+        for audio_segment in &audio_segments {
+            file.write_all(&audio_segment.audio_bytes).await?;
+        }
+        file.flush().await?;
+        drop(audio_segments);
+
+        Ok(())
+    }
+
+    async fn collect_audio_segments(
+        &self,
+        media_list_url: &str,
+    ) -> anyhow::Result<Vec<AudioSegment>> {
+        let media_playlist_response = self
+            .inner
+            .client
+            .get(media_list_url)
+            .send()
+            .await
+            .context("faild get playlist")?;
+        let media_playlist_content = media_playlist_response
+            .text()
+            .await
+            .context("faild get playlist text content")?;
+        let media_play_list = MediaPlaylist::builder()
+            .allowable_excess_duration(Duration::from_secs(5))
+            .parse(media_playlist_content.as_str())
+            .context("faild parse media playlist")?;
+
+        let media_sequence = media_play_list.media_sequence;
+        let segments = media_play_list.segments;
+
+        let mut audio_segments = Vec::new();
+        for (segment_sequence, segment) in segments {
+            let segment_url = segment.uri();
+            let processing_sequence = media_sequence + segment_sequence;
+
+            let segment_response = self
+                .inner
+                .client
+                .get(segment_url.to_string())
+                .send()
+                .await
+                .context("failed get segment")?;
+            let segment_bytes = segment_response
+                .bytes()
+                .await
+                .context("failed get segment from response")?;
+            // https://www.rfc-editor.org/rfc/rfc8216#section-3.4
+            let packed_audio_segment = segment_bytes;
+            let audio_bytes = Self::skip_id3_tag_bytes(packed_audio_segment)
+                .await
+                .context("failed skip id3 tag bytes")?;
+
+            audio_segments.push(AudioSegment::new(processing_sequence, audio_bytes));
+        }
+
+        Ok(audio_segments)
     }
 
     async fn start_read(&self) -> anyhow::Result<Receiver<anyhow::Result<Bytes>>> {
@@ -288,7 +386,9 @@ mod tests {
         let now_on_air_programs = radiko_client.now_on_air_programs(None).await?;
         let program = now_on_air_programs.first().unwrap();
         let title = program.get_info();
-        let media_list_url = radiko_client.media_list_url(&program.station_id).await?;
+        let media_list_url = radiko_client
+            .media_list_url_for_live(&program.station_id)
+            .await?;
         let temp_dir = TempDir::new_in(".")?;
         let stream_handler = Arc::new(StreamHandler::new(Client::new(), media_list_url));
         if let Err(e) = stream_handler

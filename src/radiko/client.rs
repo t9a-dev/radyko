@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
+use chrono::{DateTime, Days};
+use chrono_tz::Tz;
 use reqwest::Client;
 
 use crate::{
+    app::utils::Utils,
     model::program::{Program, Programs},
     radiko::api::{
         auth::RadikoAuth,
         program::RadikoProgram,
-        search::{RadikoSearch, RadikoSearchCondition},
+        search::{Filter, RadikoSearch, RadikoSearchCondition},
         stream::RadikoStream,
     },
 };
@@ -53,14 +56,14 @@ impl RadikoClient {
     }
 
     pub async fn stream_url(&self, station_id: &str) -> String {
-        self.inner.stream.stream_url(station_id)
+        self.inner.stream.live_stream_url(station_id)
     }
 
-    pub async fn media_list_url(&self, station_id: &str) -> anyhow::Result<String> {
+    pub async fn media_list_url_for_live(&self, station_id: &str) -> anyhow::Result<String> {
         Ok(self
             .inner
             .stream
-            .get_medialist_url(station_id)
+            .get_medialist_url_for_live(station_id)
             .await?
             .to_string())
     }
@@ -87,6 +90,33 @@ impl RadikoClient {
         if let Some(station_id) = station_id {
             condition.station_id = Some(vec![station_id.to_string()]);
         };
+
+        self.inner.search.find_program(&condition).await
+    }
+
+    pub async fn search_time_free_programs_with_keyword(
+        &self,
+        keyword: String,
+        station_id: Option<&str>,
+        start_day: Option<DateTime<Tz>>,
+    ) -> anyhow::Result<Programs> {
+        let mut condition = RadikoSearchCondition::new();
+        let _ = condition.filter.insert(Filter::TimeFree);
+        condition.key.push(keyword);
+        if let Some(station_id) = station_id {
+            condition.station_id = Some(vec![station_id.to_string()]);
+        };
+
+        let start_day_format = "%Y-%m-%d";
+        let start_day = start_day.unwrap_or(
+            // 指定が無い時はタイムフリーの制約である1週間前を設定する
+            Utils::now_with_timezone_tokyo()
+                .checked_sub_days(Days::new(7))
+                .unwrap(),
+        );
+        let _ = condition
+            .start_day
+            .insert(start_day.format(start_day_format).to_string());
 
         self.inner.search.find_program(&condition).await
     }
