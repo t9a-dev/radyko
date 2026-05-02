@@ -64,7 +64,6 @@ pub struct StreamHandler {
 #[derive(Debug)]
 struct StreamHandlerRef {
     client: reqwest::Client,
-    media_list_url: String,
 }
 
 #[derive(Debug)]
@@ -83,17 +82,15 @@ impl AudioSegment {
 }
 
 impl StreamHandler {
-    pub fn new(client: reqwest::Client, media_list_url: String) -> Self {
+    pub fn new(client: reqwest::Client) -> Self {
         Self {
-            inner: Arc::new(StreamHandlerRef {
-                client,
-                media_list_url,
-            }),
+            inner: Arc::new(StreamHandlerRef { client }),
         }
     }
 
     pub async fn start_recording(
         &self,
+        media_list_url: String,
         output_dir: PathBuf,
         file_name: &str,
         recording_duration: Duration,
@@ -108,7 +105,7 @@ impl StreamHandler {
             .await?;
 
         let span = info_span!("handle_stream_start_recording", program = file_name);
-        let mut audio_segments_receiver = self.start_read().instrument(span).await?;
+        let mut audio_segments_receiver = self.start_read(media_list_url).instrument(span).await?;
         while let Some(audio_segment) = audio_segments_receiver.recv().await {
             if end_recording <= Instant::now() {
                 info!("end recording: {}", file_name);
@@ -136,9 +133,19 @@ impl StreamHandler {
         // medialistのmediasequence_segmentsequenceとして並び替え可能な音声セグメントを取得する
         // 全てダウンロードしたら並び替えて一ファイルに結合する
         let mut audio_segments: Vec<AudioSegment> = Vec::new();
-        let mut media_list_urls = tokio_stream::iter(media_list_urls);
-        while let Some(media_list_url) = media_list_urls.next().await {
-            audio_segments.extend(self.collect_audio_segments(media_list_url.as_str()).await?);
+        let mut collect_audio_segment_handles = tokio_stream::iter(
+            media_list_urls
+                .into_iter()
+                .map(|media_list_url| {
+                    let this = self.clone();
+                    tokio::spawn(async move {
+                        this.collect_audio_segments(&media_list_url).await.unwrap()
+                    })
+                })
+                .collect::<Vec<_>>(),
+        );
+        while let Some(segments) = collect_audio_segment_handles.next().await {
+            audio_segments.extend(segments.await.unwrap());
         }
         audio_segments.sort_by_key(|a| a.sequence);
 
@@ -209,7 +216,10 @@ impl StreamHandler {
         Ok(audio_segments)
     }
 
-    async fn start_read(&self) -> anyhow::Result<Receiver<anyhow::Result<Bytes>>> {
+    async fn start_read(
+        &self,
+        media_list_url: String,
+    ) -> anyhow::Result<Receiver<anyhow::Result<Bytes>>> {
         trace!("start read");
         // radikoのHLSで返されるセグメント数が常に3なので適当に2倍を見ておいてbufferを6にした
         let (tx, rx) = mpsc::channel::<anyhow::Result<Bytes>>(6);
@@ -219,7 +229,10 @@ impl StreamHandler {
             async move {
                 // エラーをチャネル経由で伝搬する
                 // handle_hls_stream自体は無限ループなので正常系で値を返さないのでエラーのみ処理
-                if let Err(e) = this.handle_hls_stream(tx.clone()).await {
+                if let Err(e) = this
+                    .handle_hls_stream(&media_list_url.clone(), tx.clone())
+                    .await
+                {
                     error!("handle hls stream error: {:#?}", e);
                     let _ = tx.send(Err(e)).await;
                 }
@@ -230,7 +243,11 @@ impl StreamHandler {
         Ok(rx)
     }
 
-    async fn handle_hls_stream(self, tx: Sender<anyhow::Result<Bytes>>) -> anyhow::Result<()> {
+    async fn handle_hls_stream(
+        self,
+        media_list_url: &str,
+        tx: Sender<anyhow::Result<Bytes>>,
+    ) -> anyhow::Result<()> {
         trace!("start handle hls stream");
         let mut last_processed_sequence = 0;
 
@@ -239,7 +256,7 @@ impl StreamHandler {
             let media_playlist_response = self
                 .inner
                 .client
-                .get(&self.inner.media_list_url)
+                .get(media_list_url)
                 .send()
                 .await
                 .context("faild get playlist")?;
@@ -390,9 +407,10 @@ mod tests {
             .media_list_url_for_live(&program.station_id)
             .await?;
         let temp_dir = TempDir::new_in(".")?;
-        let stream_handler = Arc::new(StreamHandler::new(Client::new(), media_list_url));
+        let stream_handler = Arc::new(StreamHandler::new(Client::new()));
         if let Err(e) = stream_handler
             .start_recording(
+                media_list_url,
                 temp_dir.path().to_path_buf(),
                 &format!("{}.aac", sanitise(&title)),
                 Duration::from_secs(6),

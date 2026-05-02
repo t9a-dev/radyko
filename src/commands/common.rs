@@ -45,6 +45,7 @@ pub async fn resolve_programs(
             .collect::<Vec<_>>(),
     );
     let mut programs = Vec::new();
+    // join_allで複数の非同期処理の完了を待つと遅くなるのでtokio_streamを利用している
     // https://github.com/tokio-rs/tokio/issues/2401
     while let Some(resolved_programs) = resolve_program_handles.next().await {
         programs.extend(resolved_programs.await.unwrap());

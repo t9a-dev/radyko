@@ -128,6 +128,18 @@ impl RadikoClient {
             .await
     }
 
+    pub async fn collect_time_free_medialist_urls(
+        &self,
+        station_id: String,
+        start_at: DateTime<Tz>,
+        end_at: DateTime<Tz>,
+    ) -> anyhow::Result<Vec<String>> {
+        self.inner
+            .stream
+            .collect_time_free_medialist_urls(station_id, start_at, end_at)
+            .await
+    }
+
     async fn init(email_address: Option<&str>, password: Option<&str>) -> anyhow::Result<Self> {
         let inner = Self::init_inner(email_address, password).await?;
 

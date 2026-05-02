@@ -5,6 +5,7 @@ use chrono::{DateTime, TimeDelta};
 use chrono_tz::Tz;
 use hls_m3u8::MasterPlaylist;
 use tempfile::NamedTempFile;
+use tokio_stream::StreamExt;
 use tracing::error;
 
 use super::{auth::RadikoAuth, endpoint::Endpoint};
@@ -35,87 +36,63 @@ impl RadikoStream {
         }
     }
 
-    pub fn collect_time_free_medialist_urls(
+    pub async fn get_medialist_url_for_live(
         &self,
         station_id: &str,
+    ) -> anyhow::Result<Cow<'_, str>> {
+        let master_playlist_content: &str = &self
+            .get_hls_master_playlist_content_for_live(station_id)
+            .await?;
+        let Ok(master_playlist) = MasterPlaylist::try_from(master_playlist_content) else {
+            bail!("master_playlist_content: {:#?}", master_playlist_content)
+        };
+
+        Ok(master_playlist
+            .variant_streams
+            .first()
+            .and_then(|variant_stream| match variant_stream {
+                hls_m3u8::tags::VariantStream::ExtXStreamInf { uri, .. } => Some(uri.to_string()),
+                _ => None,
+            })
+            .with_context(|| {
+                format!(
+                    "failed load medialist url MasterPlaylist Content: {:#?}",
+                    master_playlist
+                )
+            })
+            .unwrap()
+            .into())
+    }
+
+    pub async fn collect_time_free_medialist_urls(
+        &self,
+        station_id: String,
         start_at: DateTime<Tz>,
         end_at: DateTime<Tz>,
     ) -> anyhow::Result<Vec<String>> {
-        let seek_times = Self::calculate_seek_start_times(start_at, end_at);
-        let playlist_urls = seek_times
-            .into_iter()
-            .map(async |seek| self.timefree_stream_url(station_id, start_at, end_at, seek));
         let mut medialist_urls = Vec::new();
+        let seek_times = Self::calculate_seek_start_times(start_at, end_at);
+        let mut get_medialist_url_handles = tokio_stream::iter(
+            seek_times
+                .into_iter()
+                .map(|seek| {
+                    let this = self.clone();
+                    let station_id = station_id.clone();
+                    tokio::spawn(async move {
+                        this.get_medialist_url_for_time_free(station_id, start_at, end_at, seek)
+                            .await
+                            .unwrap()
+                            .into()
+                    })
+                })
+                .collect::<Vec<_>>(),
+        );
+
+        while let Some(medialist_url) = get_medialist_url_handles.next().await {
+            medialist_urls.push(medialist_url.await.unwrap());
+        }
 
         Ok(medialist_urls)
-    }
-
-    fn timefree_stream_url(
-        &self,
-        station_id: &str,
-        start_at: DateTime<Tz>,
-        end_at: DateTime<Tz>,
-        seek: DateTime<Tz>,
-    ) -> String {
-        let lsid = &self.inner.radiko_auth.lsid().to_string();
-        if self.inner.radiko_auth.area_free() {
-            Endpoint::time_free_for_area_free_playlist_create_url_endpoint(
-                station_id, &start_at, &end_at, &seek, lsid,
-            )
-        } else {
-            Endpoint::time_free_playlist_create_url_endpoint(
-                station_id, &start_at, &end_at, &seek, lsid,
-            )
-        }
-    }
-
-    pub async fn get_hls_master_playlist_content_for_live(
-        &self,
-        station_id: &str,
-    ) -> anyhow::Result<Cow<'_, str>> {
-        let master_playlist_res = self
-            .inner
-            .radiko_auth
-            .http_client()
-            .get(self.live_stream_url(station_id))
-            .send()
-            .await?;
-
-        if !master_playlist_res.status().is_success() {
-            return Err(anyhow!(
-                "get hls master playlist error: {:#?}, client_info: {:#?}",
-                master_playlist_res.text().await?,
-                self.inner.radiko_auth.http_client()
-            ));
-        }
-
-        Ok(master_playlist_res.text().await?.into())
-    }
-
-    pub async fn get_hls_master_playlist_content_for_time_free(
-        &self,
-        station_id: &str,
-        start_at: DateTime<Tz>,
-        end_at: DateTime<Tz>,
-        seek: DateTime<Tz>,
-    ) -> anyhow::Result<Cow<'_, str>> {
-        let master_playlist_res = self
-            .inner
-            .radiko_auth
-            .http_client()
-            .get(self.timefree_stream_url(station_id, start_at, end_at, seek))
-            .send()
-            .await?;
-
-        if !master_playlist_res.status().is_success() {
-            return Err(anyhow!(
-                "get hls master playlist error: {:#?}, client_info: {:#?}",
-                master_playlist_res.text().await?,
-                self.inner.radiko_auth.http_client()
-            ));
-        }
-
-        Ok(master_playlist_res.text().await?.into())
     }
 
     pub async fn download_playlist_to_tempfile(
@@ -139,13 +116,80 @@ impl RadikoStream {
         Ok(temp_file)
     }
 
-    pub async fn get_medialist_url_for_live(
+    async fn get_hls_master_playlist_content_for_live(
         &self,
         station_id: &str,
     ) -> anyhow::Result<Cow<'_, str>> {
-        let master_playlist_content: &str = &self
-            .get_hls_master_playlist_content_for_live(station_id)
+        let master_playlist_res = self
+            .inner
+            .radiko_auth
+            .http_client()
+            .get(self.live_stream_url(station_id))
+            .send()
             .await?;
+
+        if !master_playlist_res.status().is_success() {
+            return Err(anyhow!(
+                "get hls master playlist error: {:#?}, client_info: {:#?}",
+                master_playlist_res.text().await?,
+                self.inner.radiko_auth.http_client()
+            ));
+        }
+
+        Ok(master_playlist_res.text().await?.into())
+    }
+
+    fn timefree_stream_url(
+        &self,
+        station_id: String,
+        start_at: DateTime<Tz>,
+        end_at: DateTime<Tz>,
+        seek: DateTime<Tz>,
+    ) -> String {
+        let lsid = &self.inner.radiko_auth.lsid().to_string();
+        if self.inner.radiko_auth.area_free() {
+            Endpoint::time_free_for_area_free_playlist_create_url_endpoint(
+                &station_id,
+                &start_at,
+                &end_at,
+                &seek,
+                lsid,
+            )
+        } else {
+            Endpoint::time_free_playlist_create_url_endpoint(
+                &station_id,
+                &start_at,
+                &end_at,
+                &seek,
+                lsid,
+            )
+        }
+    }
+
+    async fn get_medialist_url_for_time_free(
+        &self,
+        station_id: String,
+        start_at: DateTime<Tz>,
+        end_at: DateTime<Tz>,
+        seek: DateTime<Tz>,
+    ) -> anyhow::Result<Cow<'_, str>> {
+        let master_playlist_res = self
+            .inner
+            .radiko_auth
+            .http_client()
+            .get(self.timefree_stream_url(station_id, start_at, end_at, seek))
+            .send()
+            .await?;
+
+        if !master_playlist_res.status().is_success() {
+            return Err(anyhow!(
+                "get hls master playlist error: {:#?}, client_info: {:#?}",
+                master_playlist_res.text().await?,
+                self.inner.radiko_auth.http_client()
+            ));
+        }
+
+        let master_playlist_content: &str = &master_playlist_res.text().await?;
         let Ok(master_playlist) = MasterPlaylist::try_from(master_playlist_content) else {
             bail!("master_playlist_content: {:#?}", master_playlist_content)
         };

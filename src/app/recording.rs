@@ -35,10 +35,11 @@ async fn recording_for_live(
     let media_list_url = radiko_client
         .media_list_url_for_live(&program.station_id())
         .await?;
-    let stream_handler = StreamHandler::new(reqwest::Client::new(), media_list_url);
+    let stream_handler = StreamHandler::new(reqwest::Client::new());
     info!("start recording for live: {}", program_info);
     stream_handler
         .start_recording(
+            media_list_url,
             program.output_dir(),
             &program.output_filename(),
             Duration::from_secs(on_air_duration.0),

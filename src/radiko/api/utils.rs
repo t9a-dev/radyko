@@ -1,8 +1,6 @@
-use chrono::{DateTime, TimeDelta, Utc};
-use chrono_tz::Tz;
+use chrono::Utc;
 use md5::{Digest, Md5};
-use rand::prelude::*;
-use tracing::error;
+use rand::RngExt;
 
 pub struct Utils {}
 impl Utils {
@@ -32,9 +30,6 @@ impl Utils {
 #[cfg(test)]
 mod tests {
     use std::ops::Not;
-
-    use chrono::{NaiveDateTime, TimeZone};
-    use chrono_tz::Asia::Tokyo;
 
     use super::*;
 
