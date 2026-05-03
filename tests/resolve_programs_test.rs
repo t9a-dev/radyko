@@ -10,8 +10,16 @@ mod resolve_programs_test {
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn resolve_keyword_programs() -> anyhow::Result<()> {
-        let radyko_config = load_example_config()?;
         let radiko_client = radiko_client().await;
+        let mut radyko_config = load_example_config()?;
+        {
+            // "オールナイトニッポン"をキーワードに加えて検索結果が常に1件以上になるように調整
+            let keywords = &mut radyko_config.keywords.as_mut().unwrap();
+            keywords.0.insert(
+                radyko::app::types::Station::Id("LFR".to_string()),
+                vec!["オールナイトニッポン".to_string()],
+            );
+        }
 
         let mut result = Vec::new();
         let program_selectors = ProgramSelector::from_keywords(radyko_config.keywords.unwrap());
