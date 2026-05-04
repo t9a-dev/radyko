@@ -1,11 +1,14 @@
 use std::{
     collections::HashSet,
+    fs,
+    io::Write,
     path::PathBuf,
     sync::{Arc, RwLock},
 };
 
 use secrecy::ExposeSecret;
 use tempfile::TempDir;
+use tracing::error;
 
 use crate::{
     app::{
@@ -13,7 +16,7 @@ use crate::{
         credential::RadikoCredential,
     },
     cli::{RecorderArgs, RuleArgs},
-    model::program::ProgramId,
+    model::{Program, program::ProgramId},
     radiko::RadikoClient,
 };
 
@@ -87,31 +90,46 @@ impl AppState {
 #[derive(Debug)]
 pub struct RecorderState {
     app_state: Arc<AppState>,
-    inner: Arc<RwLock<RecorderStateRef>>,
+    inner: RecorderStateRef,
 }
 
 #[derive(Debug)]
 struct RecorderStateRef {
-    reserved_programs: HashSet<ProgramId>,
+    reserved_programs: Arc<RwLock<HashSet<ProgramId>>>,
+    reserved_state_file_path: PathBuf,
 }
 
 impl RecorderState {
-    pub fn new(app_state: Arc<AppState>) -> Self {
+    pub fn new(app_state: Arc<AppState>, reserved_state_file_path: PathBuf) -> Self {
         let inner = RecorderStateRef {
-            reserved_programs: HashSet::new(),
+            reserved_programs: Arc::new(RwLock::new(HashSet::new())),
+            reserved_state_file_path,
         };
-        Self {
-            app_state,
-            inner: Arc::new(RwLock::new(inner)),
-        }
+        Self { app_state, inner }
     }
 
-    pub fn insert_reserved_program_id(&self, program_id: ProgramId) -> bool {
-        self.inner
+    pub fn insert_reserved_program_id(&self, program: &Program) -> bool {
+        let is_inserted = self
+            .inner
+            .reserved_programs
             .write()
             .unwrap()
+            .insert(program.program_id());
+
+        if !is_inserted && let Err(e) = self.add_reserved_program(program) {
+            error!("add reserve program error: {:#?} ", e);
+        }
+
+        is_inserted
+    }
+
+    pub fn remove_reserved_program(&self, program_id: ProgramId) -> anyhow::Result<()> {
+        self.inner
             .reserved_programs
-            .insert(program_id)
+            .write()
+            .unwrap()
+            .remove(&program_id);
+        self.delete_reserved_program(program_id)
     }
 
     pub fn reload_config(&self, config_path: PathBuf) -> anyhow::Result<()> {
@@ -137,5 +155,72 @@ impl RecorderState {
 
     pub fn schedule_update_interval_secs(&self) -> u64 {
         self.app_state.schedule_update_interval_secs()
+    }
+
+    fn add_reserved_program(&self, program: &Program) -> anyhow::Result<()> {
+        let mut file = std::fs::File::options()
+            .create(true)
+            .append(true)
+            .open(self.inner.reserved_state_file_path.as_path())?;
+        writeln!(file, "{} # {}", program.program_id(), program.get_info())?;
+        Ok(())
+    }
+
+    fn delete_reserved_program(&self, program_id: ProgramId) -> anyhow::Result<()> {
+        let reserved_programs = fs::read_to_string(self.inner.reserved_state_file_path.clone())?;
+        let filtered = reserved_programs
+            .lines()
+            .filter(|line| !line.contains(&program_id.to_string()))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        fs::write(self.inner.reserved_state_file_path.clone(), filtered)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io::Read, ops::Not, sync::Arc};
+
+    use chrono::{NaiveDateTime, TimeDelta, TimeZone};
+    use chrono_tz::Asia::Tokyo;
+
+    use crate::{
+        app::state::{AppState, RecorderState},
+        model::Program,
+        test_helper::{load_example_config, radiko_client},
+    };
+
+    #[tokio::test]
+    async fn add_reserve_program_test() -> anyhow::Result<()> {
+        let app_state =
+            Arc::new(AppState::new(load_example_config()?, radiko_client().await.clone()).await?);
+        let mut reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
+        let recorder_state =
+            RecorderState::new(app_state, reserved_programs_file.path().to_path_buf());
+
+        let on_air_duration = TimeDelta::hours(1);
+        let start_at = Tokyo
+            .from_local_datetime(
+                &NaiveDateTime::parse_from_str("2000-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+            )
+            .unwrap();
+        let end_at = start_at.checked_add_signed(on_air_duration).unwrap();
+        let program = Program::new(start_at, end_at);
+
+        recorder_state.add_reserved_program(&program)?;
+        let mut content = String::new();
+        reserved_programs_file.read_to_string(&mut content)?;
+        assert!(content.is_empty().not());
+        content.clear();
+
+        recorder_state.remove_reserved_program(program.program_id())?;
+        reserved_programs_file
+            .reopen()?
+            .read_to_string(&mut content)?;
+        assert!(content.is_empty());
+
+        Ok(())
     }
 }

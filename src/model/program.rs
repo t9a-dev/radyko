@@ -1,8 +1,11 @@
+use std::fmt::{self, Display};
+
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use chrono_tz::{Asia::Tokyo, Tz};
+use radiko::api::endpoint::Endpoint;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::radiko::jst_datetime;
+use crate::radiko::{self, jst_datetime};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Seconds(pub u64);
@@ -10,6 +13,11 @@ pub struct Seconds(pub u64);
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 /// 番組情報が一意になる値を返す。録音予約済み判定に利用。
 pub struct ProgramId(pub StationId, pub StartAt, pub EndAt);
+impl Display for ProgramId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.0, self.1, self.2)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Programs {
@@ -18,10 +26,26 @@ pub struct Programs {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct StationId(pub String);
+impl Display for StationId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct StartAt(pub DateTime<Tz>);
+
+impl Display for StartAt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.format(Endpoint::DATETIME_FORMAT))
+    }
+}
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct EndAt(pub DateTime<Tz>);
+impl Display for EndAt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.format(Endpoint::DATETIME_FORMAT))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Program {
@@ -48,9 +72,9 @@ impl Default for Program {
             end_time: Tokyo
                 .from_local_datetime(&DateTime::UNIX_EPOCH.naive_local())
                 .unwrap(),
-            station_id: Default::default(),
-            title: Default::default(),
-            performer: Default::default(),
+            station_id: "TEST".to_string(),
+            title: "テスト番組名".to_string(),
+            performer: "テスト出演者".to_string(),
             // start_time_s: Default::default(),
             // end_time_s: Default::default(),
             // info: Default::default(),

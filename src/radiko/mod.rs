@@ -1,4 +1,4 @@
-mod api;
+pub mod api;
 mod client;
 mod converter;
 pub(crate) mod xml;

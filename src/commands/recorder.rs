@@ -9,6 +9,8 @@ use crate::{
 };
 use std::{
     io::{BufWriter, Write},
+    path::PathBuf,
+    str::FromStr,
     sync::Arc,
 };
 use tracing::{debug, error, info};
@@ -23,7 +25,11 @@ pub async fn run(args: RecorderArgs) {
     );
     Utils::is_writable_output_dir(app_state.output_dir().to_str().unwrap());
 
-    let recorder_state = Arc::new(RecorderState::new(Arc::clone(&app_state)));
+    let reserved_state_file_path = PathBuf::from_str("./reserved_programs").unwrap();
+    let recorder_state = Arc::new(RecorderState::new(
+        Arc::clone(&app_state),
+        reserved_state_file_path,
+    ));
     let mut reserve_schedule_update_interval = tokio::time::interval(
         tokio::time::Duration::from_secs(recorder_state.schedule_update_interval_secs()),
     );
@@ -58,7 +64,7 @@ async fn reserve(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
         recorder_state.recording_config(),
     );
     for program in programs {
-        if !recorder_state.insert_reserved_program_id(program.program_id()) {
+        if !recorder_state.insert_reserved_program_id(&program) {
             debug!("skip reserved program: {}", program.get_info());
             continue;
         }
