@@ -40,6 +40,7 @@
 */
 
 use std::{
+    fs::Metadata,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -82,6 +83,10 @@ impl AudioSegment {
 }
 
 impl StreamHandler {
+    // 2時間(7200 secs)番組 = 44381250 bytes
+    // 1 secs = 6164.0625 bytes
+    const BYTES_PER_SECS: u64 = 6164;
+
     pub fn new(client: reqwest::Client) -> Self {
         Self {
             inner: Arc::new(StreamHandlerRef { client }),
@@ -121,7 +126,9 @@ impl StreamHandler {
             drop(audio_segment);
         }
 
-        Ok(())
+        // 録音時間からファイルサイズを計算して正常に録音できているか検証する
+        // 結果はResultで返して呼び出し側に伝搬させる
+        Self::verify_recorded_file_bytes(file.metadata().await?, recording_duration)
     }
 
     pub async fn download_timefree_program(
@@ -214,6 +221,40 @@ impl StreamHandler {
         }
 
         Ok(audio_segments)
+    }
+
+    fn verify_recorded_file_bytes(
+        file_metadata: Metadata,
+        recording_duration: Duration,
+    ) -> anyhow::Result<()> {
+        // 全体的に冗長な感じもするがpanicするよりはマシだろうという感じ
+        let Some(expected_file_bytes) = recording_duration
+            .as_secs()
+            .checked_mul(Self::BYTES_PER_SECS)
+        else {
+            bail!("failed calculate expected_file_bytes");
+        };
+        // 前後5秒分サイズの欠落を許容する
+        let Some(tolerance_bytes) = 5_i32.checked_mul(Self::BYTES_PER_SECS.try_into()?) else {
+            bail!("failed tolerance_bytes");
+        };
+        let (Some(expected_bytes_start), Some(expected_bytes_end)) = (
+            expected_file_bytes.checked_sub(tolerance_bytes.try_into()?),
+            expected_file_bytes.checked_add(tolerance_bytes.try_into()?),
+        ) else {
+            bail!("failed calculate expected_bytes");
+        };
+        let actual_file_bytes = file_metadata.len();
+
+        if (expected_bytes_start..expected_bytes_end).contains(&actual_file_bytes) {
+            return Ok(());
+        }
+        bail!(
+            "recorded file verify failed. expected_file_bytes: {} ~ {} actual_file_bytes: {}",
+            expected_bytes_start,
+            expected_bytes_end,
+            actual_file_bytes
+        )
     }
 
     async fn start_read(
@@ -387,9 +428,11 @@ impl StreamHandler {
 #[cfg(test)]
 mod tests {
 
+    use std::io::Write;
+
     use reqwest::Client;
     use sanitise_file_name::sanitise;
-    use tempfile::TempDir;
+    use tempfile::{NamedTempFile, TempDir};
 
     use crate::{telemetry::init_telemetry, test_helper::radiko_client};
 
@@ -420,6 +463,34 @@ mod tests {
             error!("hls::StreamHandler test error: {:#?}", e);
         };
 
+        Ok(())
+    }
+
+    #[test]
+    fn verify_recorded_file_bytes_when_success_recording_test() -> anyhow::Result<()> {
+        // 2時間番組の録音が成功
+        let valid_bytes: usize = (StreamHandler::BYTES_PER_SECS * 7200) as usize;
+        let buf = vec![0u8; valid_bytes];
+        let mut file = NamedTempFile::new_in(".")?;
+        file.write_all(&buf)?;
+        let metadata = file.as_file().metadata()?;
+
+        let result = StreamHandler::verify_recorded_file_bytes(metadata, Duration::from_secs(7200));
+        assert!(result.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn verify_recorded_file_bytes_when_failed_recording_test() -> anyhow::Result<()> {
+        // 2時間番組の録音が失敗していて1時間しか録音できていない
+        let invalid_bytes: usize = (StreamHandler::BYTES_PER_SECS * 3600) as usize;
+        let buf = vec![0u8; invalid_bytes];
+        let mut file = NamedTempFile::new_in(".")?;
+        file.write_all(&buf)?;
+        let metadata = file.as_file().metadata()?;
+
+        let result = StreamHandler::verify_recorded_file_bytes(metadata, Duration::from_secs(7200));
+        assert!(result.is_err());
         Ok(())
     }
 }
