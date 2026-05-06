@@ -3,6 +3,7 @@ use std::fmt::{self, Display};
 use chrono::{DateTime, TimeDelta, TimeZone, Utc};
 use chrono_tz::{Asia::Tokyo, Tz};
 use radiko::api::endpoint::Endpoint;
+use sanitise_file_name::sanitise;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::radiko::{self, jst_datetime};
@@ -22,6 +23,17 @@ impl Display for ProgramId {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Programs {
     pub data: Vec<Program>,
+}
+impl Programs {
+    pub fn find_program(self, start_at: DateTime<Tz>) -> Option<Program> {
+        self.data.into_iter().find(|p| {
+            let start_at_s = start_at.format(Endpoint::DATETIME_FORMAT).to_string();
+            let p_start_time_s = p.start_time.format(Endpoint::DATETIME_FORMAT).to_string();
+            println!("p_start_time: {}", p_start_time_s);
+            println!("start_at_s: {}", start_at_s);
+            p_start_time_s == start_at_s
+        })
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -106,6 +118,16 @@ impl Program {
             "{}_{}_{}_{}",
             self.start_time, self.station_id, self.title, self.performer
         )
+    }
+
+    pub fn output_filename(&self) -> String {
+        sanitise(&format!(
+            "{}_{}_{}_{}.aac",
+            self.station_id,
+            self.start_time.format("%Y%m%d_%H%M%S"),
+            self.title,
+            self.performer,
+        ))
     }
 
     pub fn to_on_air_duration(&self, now: Option<DateTime<Tz>>) -> Seconds {

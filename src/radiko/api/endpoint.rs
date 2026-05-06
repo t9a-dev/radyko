@@ -48,8 +48,21 @@ impl Endpoint {
     pub fn now_on_air_programs(area_id: &str) -> String {
         format!("{}program/v3/now/{}.xml", API_URL, area_id)
     }
+
     pub fn weekly_programs_endpoint(station_id: &str) -> String {
         format!("{}program/v3/weekly/{}.xml", API_URL, station_id)
+    }
+
+    /// weekly_programs_endpoint の利用を推奨
+    // radiko apiの仕様で深夜3時から始まる番組は前日の番組表にしか含まれないので注意
+    // 2026/01/15/03:00~の番組情報は2026/01/15の番組表には含まれず2026/01/14の番組表に含まれる
+    pub fn date_programs_endpoint(station_id: &str, date: DateTime<Tz>) -> String {
+        format!(
+            "{}program/v3/date/{}/station/{}.xml",
+            API_URL,
+            date.format("%Y%m%d"),
+            station_id
+        )
     }
 
     #[allow(dead_code)]
@@ -101,7 +114,7 @@ impl Endpoint {
             b
     */
     /// 無料プランタイムフリーエンドポイント
-    pub fn time_free_playlist_create_url_endpoint(
+    pub fn timefree_playlist_create_url_endpoint(
         station_id: &str,
         start_at: &DateTime<Tz>,
         end_at: &DateTime<Tz>,
@@ -120,7 +133,7 @@ impl Endpoint {
     }
 
     /// エリアフリープラン会員タイムフリーエンドポイント
-    pub fn time_free_for_area_free_playlist_create_url_endpoint(
+    pub fn timefree_for_area_free_playlist_create_url_endpoint(
         station_id: &str,
         start_at: &DateTime<Tz>,
         end_at: &DateTime<Tz>,
@@ -218,6 +231,23 @@ mod tests {
     }
 
     #[test]
+    fn date_programs_endpoint() {
+        // https://api.radiko.jp/program/v3/date/20260505/station/BAYFM78.xml
+        let station_id = TEST_STATION_ID;
+        let start_at_s = "20260426010000";
+        let start_at = datetime_parse_from_string(start_at_s);
+
+        assert_eq!(
+            format!(
+                "https://api.radiko.jp/program/v3/date/{}/station/{}.xml",
+                &start_at_s[0..8],
+                station_id
+            ),
+            Endpoint::date_programs_endpoint(station_id, start_at)
+        );
+    }
+
+    #[test]
     fn playlist_create_url_endpoint_test() {
         let station_id = TEST_STATION_ID;
         let lsid = Utils::generate_md5_hash();
@@ -255,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn time_free_playlist_create_url_endpoint_test() {
+    fn timefree_playlist_create_url_endpoint_test() {
         let station_id = "LFR";
 
         let start_at_s = "20260426010000";
@@ -265,7 +295,7 @@ mod tests {
         let end_at = datetime_parse_from_string(end_at_s);
         let seek = datetime_parse_from_string(seek_s);
         let lsid = Utils::generate_md5_hash();
-        let playlist_crate_url = Endpoint::time_free_playlist_create_url_endpoint(
+        let playlist_crate_url = Endpoint::timefree_playlist_create_url_endpoint(
             station_id, &start_at, &end_at, &seek, &lsid,
         );
         assert_eq!(
@@ -278,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn time_free_for_area_free_playlist_create_url_endpoint_test() {
+    fn timefree_for_area_free_playlist_create_url_endpoint_test() {
         let station_id = "LFR";
         let start_at_s = "20260426010000";
         let end_at_s = "20260426030000";
@@ -287,7 +317,7 @@ mod tests {
         let end_at = datetime_parse_from_string(end_at_s);
         let seek = datetime_parse_from_string(seek_s);
         let lsid = Utils::generate_md5_hash();
-        let playlist_crate_url = Endpoint::time_free_for_area_free_playlist_create_url_endpoint(
+        let playlist_crate_url = Endpoint::timefree_for_area_free_playlist_create_url_endpoint(
             station_id, &start_at, &end_at, &seek, &lsid,
         );
         assert_eq!(

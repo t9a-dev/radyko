@@ -9,7 +9,7 @@ pub enum Filter {
     #[strum(to_string = "")]
     All,
     #[strum(to_string = "past")]
-    TimeFree,
+    Timefree,
 }
 
 #[skip_serializing_none]

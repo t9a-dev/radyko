@@ -94,14 +94,14 @@ impl RadikoClient {
         self.inner.search.find_program(&condition).await
     }
 
-    pub async fn search_time_free_programs_with_keyword(
+    pub async fn search_timefree_programs_with_keyword(
         &self,
         keyword: String,
         station_id: Option<&str>,
         start_day: Option<DateTime<Tz>>,
     ) -> anyhow::Result<Programs> {
         let mut condition = RadikoSearchCondition::new();
-        let _ = condition.filter.insert(Filter::TimeFree);
+        let _ = condition.filter.insert(Filter::Timefree);
         condition.key.push(keyword);
         if let Some(station_id) = station_id {
             condition.station_id = Some(vec![station_id.to_string()]);
@@ -124,11 +124,19 @@ impl RadikoClient {
     pub async fn weekly_programs(&self, station_id: &str) -> anyhow::Result<Programs> {
         self.inner
             .program
-            .weekly_programs_from_station(station_id)
+            .weekly_programs_by_station(station_id)
             .await
     }
 
-    pub async fn collect_time_free_medialist_urls(
+    pub async fn find_program(
+        &self,
+        start_at: DateTime<Tz>,
+        station_id: &str,
+    ) -> anyhow::Result<Option<Program>> {
+        self.inner.program.find_program(station_id, start_at).await
+    }
+
+    pub async fn collect_timefree_medialist_urls(
         &self,
         station_id: String,
         start_at: DateTime<Tz>,
@@ -136,7 +144,7 @@ impl RadikoClient {
     ) -> anyhow::Result<Vec<String>> {
         self.inner
             .stream
-            .collect_time_free_medialist_urls(station_id, start_at, end_at)
+            .collect_timefree_medialist_urls(station_id, start_at, end_at)
             .await
     }
 
@@ -172,5 +180,41 @@ impl RadikoClient {
             program: RadikoProgram::new(client.clone()),
             search: RadikoSearch::new(client.clone()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{radiko::api::endpoint::Endpoint, test_helper::radiko_client};
+
+    #[tokio::test]
+    async fn find_program_test() -> anyhow::Result<()> {
+        let radiko_client = radiko_client().await;
+        let timefree_programs = radiko_client
+            .search_timefree_programs_with_keyword(
+                "オールナイトニッポン".to_string(),
+                Some("LFR"),
+                None,
+            )
+            .await?;
+        let first_program = timefree_programs.data.first().unwrap();
+        println!(
+            "first_program_start_time: {}",
+            first_program.start_time.format(Endpoint::DATETIME_FORMAT)
+        );
+        // 適当に選んだ番組情報から同じ番組情報を見つけられれば良い
+        let program = radiko_client
+            .find_program(first_program.start_time, &first_program.station_id)
+            .await?;
+
+        assert!(program.is_some());
+        let program = program.unwrap();
+
+        assert_eq!(first_program.station_id, program.station_id);
+        assert_eq!(first_program.title, program.title);
+        assert_eq!(first_program.start_time, program.start_time);
+        assert_eq!(first_program.end_time, program.end_time);
+
+        Ok(())
     }
 }

@@ -6,6 +6,9 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use anyhow::bail;
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono_tz::{Asia::Tokyo, Tz};
 use secrecy::ExposeSecret;
 use tempfile::TempDir;
 use tracing::error;
@@ -16,8 +19,11 @@ use crate::{
         credential::RadikoCredential,
     },
     cli::{RecorderArgs, RuleArgs},
-    model::{Program, program::ProgramId},
-    radiko::RadikoClient,
+    model::{
+        Program,
+        program::{EndAt, ProgramId, StartAt, StationId},
+    },
+    radiko::{RadikoClient, api::endpoint::Endpoint},
 };
 
 #[derive(Debug)]
@@ -108,7 +114,23 @@ impl RecorderState {
         Self { app_state, inner }
     }
 
-    pub fn insert_reserved_program_id(&self, program: &Program) -> bool {
+    pub fn collect_aired_program_ids(
+        &self,
+        now: Option<DateTime<Tz>>,
+    ) -> anyhow::Result<Vec<ProgramId>> {
+        let now = now.unwrap_or(Utc::now().with_timezone(&Tokyo));
+
+        Ok(self
+            .get_reserved_program_ids()?
+            .into_iter()
+            .filter(|p| {
+                let EndAt(end_at) = p.2;
+                end_at < now
+            })
+            .collect())
+    }
+
+    pub fn add_reserved_program(&self, program: &Program) -> bool {
         let is_inserted = self
             .inner
             .reserved_programs
@@ -116,7 +138,7 @@ impl RecorderState {
             .unwrap()
             .insert(program.program_id());
 
-        if !is_inserted && let Err(e) = self.add_reserved_program(program) {
+        if !is_inserted && let Err(e) = self.append_reserved_program(program) {
             error!("add reserve program error: {:#?} ", e);
         }
 
@@ -157,7 +179,33 @@ impl RecorderState {
         self.app_state.schedule_update_interval_secs()
     }
 
-    fn add_reserved_program(&self, program: &Program) -> anyhow::Result<()> {
+    fn get_reserved_program_ids(&self) -> anyhow::Result<Vec<ProgramId>> {
+        let format_datetime = |s: &str| -> DateTime<Tz> {
+            Tokyo
+                .from_local_datetime(
+                    &NaiveDateTime::parse_from_str(s, Endpoint::DATETIME_FORMAT).unwrap(),
+                )
+                .unwrap()
+        };
+
+        fs::read_to_string(self.inner.reserved_state_file_path.clone())?
+            .lines()
+            .skip_while(|line| line.is_empty())
+            .map(|line| {
+                let program_info = line.split_ascii_whitespace().take(3).collect::<Vec<_>>();
+                let [station_id, start_at, end_at] = program_info.as_slice() else {
+                    bail!("failed split program info: {:#?}", program_info)
+                };
+                Ok(ProgramId(
+                    StationId(station_id.to_string()),
+                    StartAt(format_datetime(start_at)),
+                    EndAt(format_datetime(end_at)),
+                ))
+            })
+            .collect()
+    }
+
+    fn append_reserved_program(&self, program: &Program) -> anyhow::Result<()> {
         let mut file = std::fs::File::options()
             .create(true)
             .append(true)
@@ -181,24 +229,30 @@ impl RecorderState {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Read, ops::Not, sync::Arc};
+    use std::{io::Read, ops::Not, path::PathBuf, sync::Arc};
 
     use chrono::{NaiveDateTime, TimeDelta, TimeZone};
     use chrono_tz::Asia::Tokyo;
 
     use crate::{
         app::state::{AppState, RecorderState},
-        model::Program,
+        model::{Program, program::StationId},
         test_helper::{load_example_config, radiko_client},
     };
 
-    #[tokio::test]
-    async fn add_reserve_program_test() -> anyhow::Result<()> {
+    async fn setup_recorder_state(
+        reserved_programs_file_path: PathBuf,
+    ) -> anyhow::Result<RecorderState> {
         let app_state =
             Arc::new(AppState::new(load_example_config()?, radiko_client().await.clone()).await?);
-        let mut reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
+        Ok(RecorderState::new(app_state, reserved_programs_file_path))
+    }
+
+    #[tokio::test]
+    async fn get_reserved_program_test() -> anyhow::Result<()> {
+        let reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
         let recorder_state =
-            RecorderState::new(app_state, reserved_programs_file.path().to_path_buf());
+            setup_recorder_state(reserved_programs_file.path().to_path_buf()).await?;
 
         let on_air_duration = TimeDelta::hours(1);
         let start_at = Tokyo
@@ -207,19 +261,83 @@ mod tests {
             )
             .unwrap();
         let end_at = start_at.checked_add_signed(on_air_duration).unwrap();
-        let program = Program::new(start_at, end_at);
+        let mut program = Program::new(start_at, end_at);
+        program.station_id = "LFR".to_string();
 
-        recorder_state.add_reserved_program(&program)?;
+        // 録音予約を永続化(LFR)
+        recorder_state.append_reserved_program(&program)?;
+
+        // 録音予約を全て取得
+        let all_reserved_program_ids = recorder_state.get_reserved_program_ids()?;
+        assert_eq!(all_reserved_program_ids.iter().count(), 1);
+        assert_eq!(
+            all_reserved_program_ids.first().unwrap().0,
+            StationId("LFR".to_string())
+        );
+
+        // 放送が終了していない番組情報は取得できない
+        let now = Tokyo
+            .from_local_datetime(
+                &NaiveDateTime::parse_from_str("1999-04-02 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+            )
+            .unwrap();
+        let program_ids = recorder_state.collect_aired_program_ids(Some(now))?;
+        assert!(program_ids.is_empty());
+
+        // 放送が終了している番組情報が取得できる
+        let now = Tokyo
+            .from_local_datetime(
+                &NaiveDateTime::parse_from_str("2000-04-02 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+            )
+            .unwrap();
+        let program_ids = recorder_state.collect_aired_program_ids(Some(now))?;
+        assert_eq!(program_ids.iter().count(), 1);
+        assert_eq!(program_ids.first().unwrap().0, StationId("LFR".to_string()));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn add_reserve_program_test() -> anyhow::Result<()> {
+        let mut reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
+        let recorder_state =
+            setup_recorder_state(reserved_programs_file.path().to_path_buf()).await?;
+
+        let on_air_duration = TimeDelta::hours(1);
+        let start_at = Tokyo
+            .from_local_datetime(
+                &NaiveDateTime::parse_from_str("2000-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+            )
+            .unwrap();
+        let end_at = start_at.checked_add_signed(on_air_duration).unwrap();
+        let mut program = Program::new(start_at, end_at);
+        program.station_id = "LFR".to_string();
+
+        // 録音予約を永続化(LFR)
+        recorder_state.append_reserved_program(&program)?;
         let mut content = String::new();
         reserved_programs_file.read_to_string(&mut content)?;
         assert!(content.is_empty().not());
         content.clear();
 
+        // 別の放送局(TBS)情報を指定して予約情報を削除
+        // 録音予約(LFR)が残っている
+        program.station_id = "TBS".to_string();
+        recorder_state.remove_reserved_program(program.program_id())?;
+        reserved_programs_file
+            .reopen()?
+            .read_to_string(&mut content)?;
+        assert!(content.is_empty().not());
+        content.clear();
+
+        // 録音が完了したので予約情報を削除
+        program.station_id = "LFR".to_string();
         recorder_state.remove_reserved_program(program.program_id())?;
         reserved_programs_file
             .reopen()?
             .read_to_string(&mut content)?;
         assert!(content.is_empty());
+        content.clear();
 
         Ok(())
     }

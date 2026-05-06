@@ -1,3 +1,5 @@
+use crate::model::program::ProgramId;
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Keyword(pub String);
 
@@ -7,6 +9,11 @@ pub enum Station {
     /// 全国: 放送局指定なし
     Nationwide,
     Id(String),
+}
+
+pub enum RecordingEvent {
+    Done(ProgramId),
+    Fail(ProgramId),
 }
 
 mod station_serde {

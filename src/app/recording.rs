@@ -17,8 +17,7 @@ pub async fn start_for_live(
     radiko_client: RadikoClient,
     program: Arc<ReserveProgram>,
 ) -> anyhow::Result<()> {
-    recording_for_live(&radiko_client, Arc::clone(&program)).await?;
-    Ok(())
+    recording_for_live(&radiko_client, Arc::clone(&program)).await
 }
 
 async fn recording_for_live(

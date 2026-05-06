@@ -45,7 +45,8 @@ mod recording_program_test {
             now.checked_add_signed(TimeDelta::seconds(recording_duration_secs))
                 .unwrap(),
         );
-        program_reserver.reserve(test_reserve_program).await?;
+        let (tx, _rx) = tokio::sync::mpsc::channel(100);
+        program_reserver.reserve(test_reserve_program, tx).await?;
 
         // バックグラウンドで録音処理が実行される時間待機
         // 録音処理でエラーが発生しないことのみを検証

@@ -64,7 +64,7 @@ impl RadikoStream {
             .into())
     }
 
-    pub async fn collect_time_free_medialist_urls(
+    pub async fn collect_timefree_medialist_urls(
         &self,
         station_id: String,
         start_at: DateTime<Tz>,
@@ -79,7 +79,7 @@ impl RadikoStream {
                     let this = self.clone();
                     let station_id = station_id.clone();
                     tokio::spawn(async move {
-                        this.get_medialist_url_for_time_free(station_id, start_at, end_at, seek)
+                        this.get_medialist_url_for_timefree(station_id, start_at, end_at, seek)
                             .await
                             .unwrap()
                             .into()
@@ -148,7 +148,7 @@ impl RadikoStream {
     ) -> String {
         let lsid = &self.inner.radiko_auth.lsid().to_string();
         if self.inner.radiko_auth.area_free() {
-            Endpoint::time_free_for_area_free_playlist_create_url_endpoint(
+            Endpoint::timefree_for_area_free_playlist_create_url_endpoint(
                 &station_id,
                 &start_at,
                 &end_at,
@@ -156,7 +156,7 @@ impl RadikoStream {
                 lsid,
             )
         } else {
-            Endpoint::time_free_playlist_create_url_endpoint(
+            Endpoint::timefree_playlist_create_url_endpoint(
                 &station_id,
                 &start_at,
                 &end_at,
@@ -166,7 +166,7 @@ impl RadikoStream {
         }
     }
 
-    async fn get_medialist_url_for_time_free(
+    async fn get_medialist_url_for_timefree(
         &self,
         station_id: String,
         start_at: DateTime<Tz>,

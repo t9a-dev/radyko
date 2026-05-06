@@ -1,7 +1,7 @@
 mod common;
 
 #[cfg(test)]
-mod time_free_test {
+mod timefree_test {
     use std::{ops::Not, path::PathBuf, str::FromStr};
 
     use radyko::app::{hls::StreamHandler, program_reserver::ReserveProgram};
@@ -10,10 +10,10 @@ mod time_free_test {
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
-    async fn time_free_search_test() -> anyhow::Result<()> {
+    async fn timefree_search_test() -> anyhow::Result<()> {
         let radiko_client = radiko_client().await;
         let programs = radiko_client
-            .search_time_free_programs_with_keyword(
+            .search_timefree_programs_with_keyword(
                 "オールナイトニッポン".to_string(),
                 Some("LFR"),
                 None,
@@ -24,9 +24,9 @@ mod time_free_test {
         println!("resolve keyword programs: {:#?}", programs);
 
         /*
+           station_id: "LFR"
            start_time: 2026-04-26T03:00:00JST,
            end_time: 2026-04-26T05:00:00JST,
-           station_id: "LFR"
         */
 
         Ok(())
@@ -34,26 +34,26 @@ mod time_free_test {
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
-    async fn collect_time_free_medialist_urls_test() -> anyhow::Result<()> {
+    async fn collect_timefree_medialist_urls_test() -> anyhow::Result<()> {
         let radiko_client = radiko_client().await;
-        let time_free_programs = radiko_client
-            .search_time_free_programs_with_keyword(
+        let timefree_programs = radiko_client
+            .search_timefree_programs_with_keyword(
                 "オールナイトニッポン".to_string(),
                 Some("LFR"),
                 None,
             )
             .await?;
-        let dummy_program = time_free_programs.data.first().unwrap();
+        let dummy_program = timefree_programs.data.first().unwrap();
 
         println!("resolve keyword program: {:#?}", dummy_program);
         /*
+           station_id: "LFR"
            start_time: 2026-04-26T03:00:00JST,
            end_time: 2026-04-26T05:00:00JST,
-           station_id: "LFR"
         */
 
         let medialist_urls = radiko_client
-            .collect_time_free_medialist_urls(
+            .collect_timefree_medialist_urls(
                 dummy_program.station_id.to_string(),
                 dummy_program.start_time,
                 dummy_program.end_time,
@@ -72,26 +72,26 @@ mod time_free_test {
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
-    async fn download_time_free_test() -> anyhow::Result<()> {
+    async fn download_timefree_test() -> anyhow::Result<()> {
         let radiko_client = radiko_client().await;
-        let time_free_programs = radiko_client
-            .search_time_free_programs_with_keyword(
+        let timefree_programs = radiko_client
+            .search_timefree_programs_with_keyword(
                 "オールナイトニッポン".to_string(),
                 Some("LFR"),
                 None,
             )
             .await?;
-        let dummy_program = time_free_programs.data.first().unwrap();
+        let dummy_program = timefree_programs.data.first().unwrap();
 
         println!("resolve keyword program: {:#?}", dummy_program);
         /*
+           station_id: "LFR"
            start_time: 2026-04-26T03:00:00JST,
            end_time: 2026-04-26T05:00:00JST,
-           station_id: "LFR"
         */
 
         let medialist_urls = radiko_client
-            .collect_time_free_medialist_urls(
+            .collect_timefree_medialist_urls(
                 dummy_program.station_id.to_string(),
                 dummy_program.start_time,
                 dummy_program.end_time,
@@ -103,7 +103,7 @@ mod time_free_test {
 
         let stream_handler = StreamHandler::new(reqwest::Client::new());
 
-        let output_dir_path = PathBuf::from_str("./time_free_test")?;
+        let output_dir_path = PathBuf::from_str("./timefree_test")?;
         let _ = std::fs::create_dir_all(&output_dir_path)?;
         let download_program = ReserveProgram::new(dummy_program.clone(), output_dir_path, None);
         let _ = stream_handler

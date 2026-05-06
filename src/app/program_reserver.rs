@@ -9,6 +9,7 @@ use crate::{
     app::{
         config::{RecordingConfig, RecordingDurationBufferConfig},
         recording::{self},
+        types::RecordingEvent,
     },
     model::program::{Program, Seconds},
     radiko::RadikoClient,
@@ -102,13 +103,7 @@ impl ReserveProgram {
     }
 
     pub fn output_filename(&self) -> String {
-        sanitise(&format!(
-            "{}_{}_{}_{}.aac",
-            self.program.station_id,
-            self.program.start_time.format("%Y%m%d_%H%M%S"),
-            self.program.title,
-            self.program.performer,
-        ))
+        self.program.output_filename()
     }
 }
 
@@ -134,7 +129,11 @@ impl ProgramReserver {
     }
 
     #[tracing::instrument(name = "recorder_reserve" skip(self,program))]
-    pub async fn reserve(&self, program: Program) -> anyhow::Result<()> {
+    pub async fn reserve(
+        &self,
+        program: Program,
+        tx: tokio::sync::mpsc::Sender<RecordingEvent>,
+    ) -> anyhow::Result<()> {
         let program = Arc::new(ReserveProgram::new(
             program,
             self.inner.config.output_dir.clone(),
@@ -156,8 +155,18 @@ impl ProgramReserver {
                 if let Err(e) = tokio::fs::create_dir_all(program.output_dir()).await {
                     error!("create recording dir error: {:#?}", e)
                 };
-                if let Err(e) = recording::start_for_live(refreshed_radiko_client, program).await {
-                    error!("recording error: {:#?}", e);
+                match recording::start_for_live(refreshed_radiko_client, program.clone()).await {
+                    Ok(_) => {
+                        let _ = tx
+                            .send(RecordingEvent::Done(program.program.program_id()))
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = tx
+                            .send(RecordingEvent::Fail(program.program.program_id()))
+                            .await;
+                        error!("recording error: {:#?}", e);
+                    }
                 };
             }
             .in_current_span(),

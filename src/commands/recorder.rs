@@ -1,7 +1,10 @@
 use crate::{
     app::{
+        hls::StreamHandler,
         program_reserver::ProgramReserver,
+        program_resolver,
         state::{AppState, RecorderState},
+        types::RecordingEvent,
         utils::Utils,
     },
     cli::RecorderArgs,
@@ -9,8 +12,6 @@ use crate::{
 };
 use std::{
     io::{BufWriter, Write},
-    path::PathBuf,
-    str::FromStr,
     sync::Arc,
 };
 use tracing::{debug, error, info};
@@ -25,7 +26,8 @@ pub async fn run(args: RecorderArgs) {
     );
     Utils::is_writable_output_dir(app_state.output_dir().to_str().unwrap());
 
-    let reserved_state_file_path = PathBuf::from_str("./reserved_programs").unwrap();
+    // 録音ファイル出力ディレクトリ直下に録音予約管理ファイルを配置することでコンテナ環境でも追加の設定無しに永続化される
+    let reserved_state_file_path = app_state.output_dir().join("reserved_programs");
     let recorder_state = Arc::new(RecorderState::new(
         Arc::clone(&app_state),
         reserved_state_file_path,
@@ -37,10 +39,15 @@ pub async fn run(args: RecorderArgs) {
     reserve_schedule_update_interval.tick().await;
 
     loop {
-        match reserve(Arc::clone(&recorder_state)).await {
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        match reserve(Arc::clone(&recorder_state), tx).await {
             Ok(_) => info!("recorder run success"),
             Err(e) => error!("recorder error: {:#?}", e),
         }
+        let _ = recording_event_handler(Arc::clone(&recorder_state), rx).await;
+        if let Err(e) = download_timefree_programs(Arc::clone(&recorder_state)).await {
+            error!("timefree download error: {:#?}", e);
+        };
         reserve_schedule_update_interval.tick().await;
         if let Err(e) = recorder_state.reload_config(args.config.config_path.clone()) {
             error!("error reload config: {:#?}", e);
@@ -48,7 +55,10 @@ pub async fn run(args: RecorderArgs) {
     }
 }
 
-async fn reserve(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
+async fn reserve(
+    recorder_state: Arc<RecorderState>,
+    tx: tokio::sync::mpsc::Sender<RecordingEvent>,
+) -> anyhow::Result<()> {
     info!("local now: {}", chrono::Local::now());
     let program_selectors = collect_program_selectors(&recorder_state.config().read().unwrap())?;
     let programs = resolve_programs(recorder_state.app_state(), program_selectors).await?;
@@ -64,16 +74,69 @@ async fn reserve(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
         recorder_state.recording_config(),
     );
     for program in programs {
-        if !recorder_state.insert_reserved_program_id(&program) {
+        if !recorder_state.add_reserved_program(&program) {
             debug!("skip reserved program: {}", program.get_info());
             continue;
         }
         let add_reserve_program_info = format!("add reserve: {}", program.get_info());
         debug!(add_reserve_program_info);
         writeln!(writer, "{}", add_reserve_program_info)?;
-        program_reserver.reserve(program).await?;
+        program_reserver.reserve(program, tx.clone()).await?;
     }
 
     writer.flush()?;
+    Ok(())
+}
+
+async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
+    let program_ids = recorder_state.collect_aired_program_ids(None)?;
+    let radiko_client = &recorder_state.app_state().radiko_client;
+    let timefree_programs =
+        program_resolver::resolve_program_id(radiko_client, program_ids).await?;
+    let stream_handler = StreamHandler::new(reqwest::Client::new());
+    for program in timefree_programs {
+        let media_list_urls = radiko_client
+            .collect_timefree_medialist_urls(
+                program.station_id.clone(),
+                program.start_time,
+                program.end_time,
+            )
+            .await?;
+        stream_handler
+            .download_timefree_program(
+                media_list_urls,
+                recorder_state.recording_config().output_dir,
+                &program.output_filename(),
+            )
+            .await?;
+        recorder_state.remove_reserved_program(program.program_id())?
+    }
+
+    Ok(())
+}
+
+async fn recording_event_handler(
+    recorder_state: Arc<RecorderState>,
+    mut rx: tokio::sync::mpsc::Receiver<RecordingEvent>,
+) -> anyhow::Result<()> {
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                RecordingEvent::Done(program_id) => {
+                    // 録音処理に成功したので録音予約情報を削除
+                    if let Err(e) = recorder_state.remove_reserved_program(program_id) {
+                        error!("failed remove reserved program: {:#?}", e);
+                    };
+                }
+                RecordingEvent::Fail(program_id) => {
+                    // 録音予約時点で録音予約は永続化されており、録音成功時に録音情報が削除される
+                    // タイムフリーダウンロード処理成功時点で永続化してある録音予約情報が削除される
+                    // ここでは録音予約情報を削除せず、ログだけ出力する
+                    info!("リアルタイム録音処理に失敗: {}", program_id);
+                }
+            }
+        }
+    });
+
     Ok(())
 }
