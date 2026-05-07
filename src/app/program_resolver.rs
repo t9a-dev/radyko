@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use chrono::DateTime;
 use chrono_tz::Tz;
 
-use tokio_stream::StreamExt;
+use futures::{StreamExt, TryStreamExt, stream};
 use tracing::warn;
 
 use crate::{
+    RADYKO_CONCURRENCY,
     app::{
         program_selector::{Keywords, ProgramSelector, Selector, StartTimes},
         types::Station,
@@ -19,18 +20,15 @@ pub async fn resolve_program_id(
     radiko_client: &RadikoClient,
     ids: Vec<ProgramId>,
 ) -> anyhow::Result<Vec<Program>> {
-    let mut find_program_handles = tokio_stream::iter(
-        ids.into_iter()
-            .map(|id| {
-                let radiko_client = radiko_client.clone();
-                tokio::spawn(async move { radiko_client.find_program(id.1.0, &id.0.0).await })
-            })
-            .collect::<Vec<_>>(),
-    );
-    let mut programs = Vec::new();
-    while let Some(program) = find_program_handles.next().await {
-        program.await??.inspect(|p| programs.push(p.clone()));
-    }
+    let programs = stream::iter(ids.iter())
+        .map(|id| {
+            let radiko_client = radiko_client.clone();
+            async move { radiko_client.find_program(id.1.0, &id.0.0).await }
+        })
+        .buffer_unordered(RADYKO_CONCURRENCY)
+        .try_filter_map(|program| async move { Ok(program) })
+        .try_collect::<Vec<_>>()
+        .await?;
 
     Ok(programs)
 }

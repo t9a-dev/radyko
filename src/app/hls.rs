@@ -48,14 +48,16 @@ use std::{
 
 use anyhow::{Context, bail};
 use bytes::{Buf, Bytes};
+use futures::{StreamExt, TryStreamExt, stream};
 use hls_m3u8::MediaPlaylist;
 use tokio::{
     io::AsyncWriteExt,
     sync::mpsc::{self, Receiver, Sender},
     time::Instant,
 };
-use tokio_stream::StreamExt;
 use tracing::{Instrument, error, info, info_span, trace, warn};
+
+use crate::RADYKO_CONCURRENCY;
 
 #[derive(Debug, Clone)]
 pub struct StreamHandler {
@@ -139,21 +141,17 @@ impl StreamHandler {
     ) -> anyhow::Result<()> {
         // medialistのmediasequence_segmentsequenceとして並び替え可能な音声セグメントを取得する
         // 全てダウンロードしたら並び替えて一ファイルに結合する
-        let mut audio_segments: Vec<AudioSegment> = Vec::new();
-        let mut collect_audio_segment_handles = tokio_stream::iter(
-            media_list_urls
-                .into_iter()
-                .map(|media_list_url| {
-                    let this = self.clone();
-                    tokio::spawn(async move {
-                        this.collect_audio_segments(&media_list_url).await.unwrap()
-                    })
-                })
-                .collect::<Vec<_>>(),
-        );
-        while let Some(segments) = collect_audio_segment_handles.next().await {
-            audio_segments.extend(segments.await.unwrap());
-        }
+        let mut audio_segments: Vec<AudioSegment> = stream::iter(media_list_urls)
+            .map(|media_list_url| {
+                let this = self.clone();
+                async move { this.collect_audio_segments(&media_list_url).await }
+            })
+            .buffer_unordered(RADYKO_CONCURRENCY)
+            .try_fold(Vec::new(), |mut audio_segments, segments| async move {
+                audio_segments.extend(segments);
+                Ok(audio_segments)
+            })
+            .await?;
         audio_segments.sort_by_key(|a| a.sequence);
 
         tokio::fs::create_dir_all(output_dir.clone()).await?;

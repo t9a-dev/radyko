@@ -6,6 +6,7 @@ pub mod model;
 pub mod radiko;
 pub mod telemetry;
 
+pub const RADYKO_CONCURRENCY: usize = 8;
 #[cfg(test)]
 pub mod test_helper {
 

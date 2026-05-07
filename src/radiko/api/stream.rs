@@ -3,10 +3,12 @@ use std::{borrow::Cow, convert::TryFrom, io::Write, sync::Arc};
 use anyhow::{Context, anyhow, bail};
 use chrono::{DateTime, TimeDelta};
 use chrono_tz::Tz;
+use futures::{StreamExt, TryStreamExt};
 use hls_m3u8::MasterPlaylist;
 use tempfile::NamedTempFile;
-use tokio_stream::StreamExt;
 use tracing::error;
+
+use crate::RADYKO_CONCURRENCY;
 
 use super::{auth::RadikoAuth, endpoint::Endpoint};
 
@@ -70,27 +72,19 @@ impl RadikoStream {
         start_at: DateTime<Tz>,
         end_at: DateTime<Tz>,
     ) -> anyhow::Result<Vec<String>> {
-        let mut medialist_urls = Vec::new();
         let seek_times = Self::calculate_seek_start_times(start_at, end_at);
-        let mut get_medialist_url_handles = tokio_stream::iter(
-            seek_times
-                .into_iter()
-                .map(|seek| {
-                    let this = self.clone();
-                    let station_id = station_id.clone();
-                    tokio::spawn(async move {
-                        this.get_medialist_url_for_timefree(station_id, start_at, end_at, seek)
-                            .await
-                            .unwrap()
-                            .into()
-                    })
-                })
-                .collect::<Vec<_>>(),
-        );
-
-        while let Some(medialist_url) = get_medialist_url_handles.next().await {
-            medialist_urls.push(medialist_url.await.unwrap());
-        }
+        let medialist_urls = futures::stream::iter(seek_times)
+            .map(|seek_time| {
+                let this = self.clone();
+                let station_id = station_id.clone();
+                async move {
+                    this.get_medialist_url_for_timefree(station_id, start_at, end_at, seek_time)
+                        .await
+                }
+            })
+            .buffer_unordered(RADYKO_CONCURRENCY)
+            .try_collect::<Vec<_>>()
+            .await?;
 
         Ok(medialist_urls)
     }
@@ -172,7 +166,7 @@ impl RadikoStream {
         start_at: DateTime<Tz>,
         end_at: DateTime<Tz>,
         seek: DateTime<Tz>,
-    ) -> anyhow::Result<Cow<'_, str>> {
+    ) -> anyhow::Result<String> {
         let master_playlist_res = self
             .inner
             .radiko_auth
@@ -194,7 +188,7 @@ impl RadikoStream {
             bail!("master_playlist_content: {:#?}", master_playlist_content)
         };
 
-        Ok(master_playlist
+        master_playlist
             .variant_streams
             .first()
             .and_then(|variant_stream| match variant_stream {
@@ -207,8 +201,6 @@ impl RadikoStream {
                     master_playlist
                 )
             })
-            .unwrap()
-            .into())
     }
 
     fn calculate_seek_start_times(

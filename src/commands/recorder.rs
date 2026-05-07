@@ -46,12 +46,9 @@ pub async fn run(args: RecorderArgs) {
         }
         let _ = recording_event_handler(Arc::clone(&recorder_state), rx).await;
         let shared_recorder_state = Arc::clone(&recorder_state);
-        let _ = tokio::spawn(async move {
-            if let Err(e) = download_timefree_programs(shared_recorder_state).await {
-                error!("timefree download error: {:#?}", e);
-            };
-        })
-        .await;
+        if let Err(e) = download_timefree_programs(shared_recorder_state).await {
+            error!("timefree download error: {:#?}", e);
+        };
         reserve_schedule_update_interval.tick().await;
         if let Err(e) = recorder_state.reload_config(args.config.config_path.clone()) {
             error!("error reload config: {:#?}", e);
@@ -93,7 +90,7 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
     let program_ids = recorder_state.collect_aired_program_ids(None)?;
     let radiko_client = &recorder_state.app_state().radiko_client;
     let timefree_programs =
-        program_resolver::resolve_program_id(&radiko_client, program_ids).await?;
+        program_resolver::resolve_program_id(radiko_client, program_ids).await?;
     if timefree_programs.is_empty() {
         info!("timefree programs empty");
         return Ok(());
