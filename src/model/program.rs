@@ -26,13 +26,7 @@ pub struct Programs {
 }
 impl Programs {
     pub fn find_program(self, start_at: DateTime<Tz>) -> Option<Program> {
-        self.data.into_iter().find(|p| {
-            let start_at_s = start_at.format(Endpoint::DATETIME_FORMAT).to_string();
-            let p_start_time_s = p.start_time.format(Endpoint::DATETIME_FORMAT).to_string();
-            println!("p_start_time: {}", p_start_time_s);
-            println!("start_at_s: {}", start_at_s);
-            p_start_time_s == start_at_s
-        })
+        self.data.into_iter().find(|p| p.start_time.eq(&start_at))
     }
 }
 
