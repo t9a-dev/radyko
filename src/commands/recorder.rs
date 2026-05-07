@@ -45,9 +45,13 @@ pub async fn run(args: RecorderArgs) {
             Err(e) => error!("recorder error: {:#?}", e),
         }
         let _ = recording_event_handler(Arc::clone(&recorder_state), rx).await;
-        if let Err(e) = download_timefree_programs(Arc::clone(&recorder_state)).await {
-            error!("timefree download error: {:#?}", e);
-        };
+        let shared_recorder_state = Arc::clone(&recorder_state);
+        let _ = tokio::spawn(async move {
+            if let Err(e) = download_timefree_programs(shared_recorder_state).await {
+                error!("timefree download error: {:#?}", e);
+            };
+        })
+        .await;
         reserve_schedule_update_interval.tick().await;
         if let Err(e) = recorder_state.reload_config(args.config.config_path.clone()) {
             error!("error reload config: {:#?}", e);
@@ -73,11 +77,8 @@ async fn reserve(
         recorder_state.app_state().radiko_client.clone(),
         recorder_state.recording_config(),
     );
-    for program in programs {
-        if !recorder_state.add_reserved_program(&program) {
-            debug!("skip reserved program: {}", program.get_info());
-            continue;
-        }
+    let reserved_programs = recorder_state.add_reserve_programs(programs);
+    for program in reserved_programs {
         let add_reserve_program_info = format!("add reserve: {}", program.get_info());
         debug!(add_reserve_program_info);
         writeln!(writer, "{}", add_reserve_program_info)?;
@@ -90,12 +91,18 @@ async fn reserve(
 
 async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
     let program_ids = recorder_state.collect_aired_program_ids(None)?;
-    let radiko_client = &recorder_state.app_state().radiko_client;
+    let radiko_client = recorder_state
+        .app_state()
+        .radiko_client
+        .refresh_auth()
+        .await?;
     let timefree_programs =
-        program_resolver::resolve_program_id(radiko_client, program_ids).await?;
+        program_resolver::resolve_program_id(&radiko_client, program_ids).await?;
     let stream_handler = StreamHandler::new(reqwest::Client::new());
+
     for program in timefree_programs {
         let media_list_urls = radiko_client
+            .clone()
             .collect_timefree_medialist_urls(
                 program.station_id.clone(),
                 program.start_time,
@@ -105,7 +112,7 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
         stream_handler
             .download_timefree_program(
                 media_list_urls,
-                recorder_state.recording_config().output_dir,
+                program.output_dir(recorder_state.app_state().output_dir()),
                 &program.output_filename(),
             )
             .await?;

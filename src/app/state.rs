@@ -1,13 +1,12 @@
 use std::{
     collections::HashSet,
     fs,
-    io::Write,
+    io::{BufWriter, Write},
     path::PathBuf,
     sync::{Arc, RwLock},
 };
 
-use anyhow::bail;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use chrono_tz::{Asia::Tokyo, Tz};
 use secrecy::ExposeSecret;
 use tempfile::TempDir;
@@ -21,9 +20,9 @@ use crate::{
     cli::{RecorderArgs, RuleArgs},
     model::{
         Program,
-        program::{EndAt, ProgramId, StartAt, StationId},
+        program::{EndAt, ProgramId},
     },
-    radiko::{RadikoClient, api::endpoint::Endpoint},
+    radiko::RadikoClient,
 };
 
 #[derive(Debug)]
@@ -130,19 +129,23 @@ impl RecorderState {
             .collect())
     }
 
-    pub fn add_reserved_program(&self, program: &Program) -> bool {
-        let is_inserted = self
-            .inner
-            .reserved_programs
-            .write()
-            .unwrap()
-            .insert(program.program_id());
+    pub fn add_reserve_programs(&self, programs: Vec<Program>) -> Vec<Program> {
+        let reserved_programs = programs
+            .into_iter()
+            .filter(|program| {
+                self.inner
+                    .reserved_programs
+                    .write()
+                    .unwrap()
+                    .insert(program.program_id())
+            })
+            .collect::<Vec<_>>();
 
-        if !is_inserted && let Err(e) = self.append_reserved_program(program) {
+        if let Err(e) = self.append_reserved_program(&reserved_programs) {
             error!("add reserve program error: {:#?} ", e);
         }
 
-        is_inserted
+        reserved_programs
     }
 
     pub fn remove_reserved_program(&self, program_id: ProgramId) -> anyhow::Result<()> {
@@ -180,37 +183,31 @@ impl RecorderState {
     }
 
     fn get_reserved_program_ids(&self) -> anyhow::Result<Vec<ProgramId>> {
-        let format_datetime = |s: &str| -> DateTime<Tz> {
-            Tokyo
-                .from_local_datetime(
-                    &NaiveDateTime::parse_from_str(s, Endpoint::DATETIME_FORMAT).unwrap(),
-                )
-                .unwrap()
-        };
-
-        fs::read_to_string(self.inner.reserved_state_file_path.clone())?
-            .lines()
-            .skip_while(|line| line.is_empty())
-            .map(|line| {
-                let program_info = line.split_ascii_whitespace().take(3).collect::<Vec<_>>();
-                let [station_id, start_at, end_at] = program_info.as_slice() else {
-                    bail!("failed split program info: {:#?}", program_info)
-                };
-                Ok(ProgramId(
-                    StationId(station_id.to_string()),
-                    StartAt(format_datetime(start_at)),
-                    EndAt(format_datetime(end_at)),
-                ))
-            })
-            .collect()
+        ProgramId::parse_from_string(fs::read_to_string(
+            self.inner.reserved_state_file_path.clone(),
+        )?)
     }
 
-    fn append_reserved_program(&self, program: &Program) -> anyhow::Result<()> {
-        let mut file = std::fs::File::options()
-            .create(true)
-            .append(true)
-            .open(self.inner.reserved_state_file_path.as_path())?;
-        writeln!(file, "{} # {}", program.program_id(), program.get_info())?;
+    fn append_reserved_program(&self, programs: &[Program]) -> anyhow::Result<()> {
+        let reserved_program_ids = ProgramId::parse_from_string(fs::read_to_string(
+            self.inner.reserved_state_file_path.as_path(),
+        )?)?;
+        let reserve_programs = programs
+            .iter()
+            .filter(|program| !reserved_program_ids.contains(&program.program_id()))
+            .collect::<Vec<_>>();
+
+        let mut file = BufWriter::new(
+            std::fs::File::options()
+                .create(true)
+                .append(true)
+                .open(self.inner.reserved_state_file_path.as_path())?,
+        );
+        for program in reserve_programs {
+            writeln!(file, "{} # {}", program.program_id(), program.get_info())?;
+        }
+        file.flush()?;
+
         Ok(())
     }
 
@@ -229,14 +226,17 @@ impl RecorderState {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Read, ops::Not, path::PathBuf, sync::Arc};
+    use std::{io::Read, path::PathBuf, sync::Arc};
 
     use chrono::{NaiveDateTime, TimeDelta, TimeZone};
     use chrono_tz::Asia::Tokyo;
 
     use crate::{
         app::state::{AppState, RecorderState},
-        model::{Program, program::StationId},
+        model::{
+            Program,
+            program::{ProgramId, StationId},
+        },
         test_helper::{load_example_config, radiko_client},
     };
 
@@ -265,7 +265,7 @@ mod tests {
         program.station_id = "LFR".to_string();
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&program)?;
+        recorder_state.append_reserved_program(&vec![program])?;
 
         // 録音予約を全て取得
         let all_reserved_program_ids = recorder_state.get_reserved_program_ids()?;
@@ -314,25 +314,36 @@ mod tests {
         program.station_id = "LFR".to_string();
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&program)?;
+        recorder_state.append_reserved_program(&vec![program.clone()])?;
         let mut content = String::new();
         reserved_programs_file.read_to_string(&mut content)?;
-        assert!(content.is_empty().not());
-        content.clear();
+        assert_eq!(ProgramId::parse_from_string(content)?.len(), 1);
+
+        // 重複した予約情報は登録されない(LFR)
+        recorder_state.append_reserved_program(&vec![program.clone()])?;
+        let mut content = String::new();
+        reserved_programs_file
+            .reopen()?
+            .read_to_string(&mut content)?;
+        assert_eq!(ProgramId::parse_from_string(content)?.len(), 1);
 
         // 別の放送局(TBS)情報を指定して予約情報を削除
         // 録音予約(LFR)が残っている
         program.station_id = "TBS".to_string();
         recorder_state.remove_reserved_program(program.program_id())?;
+        let mut content = String::new();
         reserved_programs_file
             .reopen()?
             .read_to_string(&mut content)?;
-        assert!(content.is_empty().not());
-        content.clear();
+        assert_eq!(
+            ProgramId::parse_from_string(content)?.first().unwrap().0,
+            StationId("LFR".to_string())
+        );
 
         // 録音が完了したので予約情報を削除
         program.station_id = "LFR".to_string();
         recorder_state.remove_reserved_program(program.program_id())?;
+        let mut content = String::new();
         reserved_programs_file
             .reopen()?
             .read_to_string(&mut content)?;

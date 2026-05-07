@@ -2,7 +2,6 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use chrono::DateTime;
 use chrono_tz::Tz;
-use sanitise_file_name::sanitise;
 use tracing::{Instrument, error, trace};
 
 use crate::{
@@ -99,7 +98,7 @@ impl ReserveProgram {
     }
 
     pub fn output_dir(&self) -> PathBuf {
-        self.output_root_dir.join(sanitise(&self.program.title))
+        self.program.output_dir(self.output_root_dir.clone())
     }
 
     pub fn output_filename(&self) -> String {
