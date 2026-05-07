@@ -15,7 +15,7 @@ clap = { version = "4.6.1", features = ["derive"] }
 cron = "0.16.0"
 dotenvy = "0.15.7"
 hex = "0.4.3"
-hls_m3u8 = "0.5.1"
+hls_m3u8 = "0.7.0"
 log = "0.4.29"
 mimalloc = { version = "0.1.48", features = ["v3"] }
 opentelemetry = "0.31.0"
