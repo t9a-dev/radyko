@@ -91,15 +91,20 @@ async fn reserve(
 
 async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
     let program_ids = recorder_state.collect_aired_program_ids(None)?;
+    let radiko_client = &recorder_state.app_state().radiko_client;
+    let timefree_programs =
+        program_resolver::resolve_program_id(&radiko_client, program_ids).await?;
+    if timefree_programs.is_empty() {
+        info!("timefree programs empty");
+        return Ok(());
+    }
+
     let radiko_client = recorder_state
         .app_state()
         .radiko_client
         .refresh_auth()
         .await?;
-    let timefree_programs =
-        program_resolver::resolve_program_id(&radiko_client, program_ids).await?;
     let stream_handler = StreamHandler::new(reqwest::Client::new());
-
     for program in timefree_programs {
         let media_list_urls = radiko_client
             .clone()
