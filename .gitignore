@@ -2,6 +2,7 @@
 *.env
 **/*.aac
 **/.DS_Store
+**/recorded
 radyko_cache
 radyko.toml
 compose.yml
