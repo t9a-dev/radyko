@@ -106,6 +106,7 @@ struct RecorderStateRef {
 
 impl RecorderState {
     pub fn new(app_state: Arc<AppState>, reserved_state_file_path: PathBuf) -> Self {
+        let _ = fs::File::create_new(reserved_state_file_path.as_path());
         let inner = RecorderStateRef {
             reserved_programs: Arc::new(RwLock::new(HashSet::new())),
             reserved_state_file_path,
@@ -189,7 +190,6 @@ impl RecorderState {
     }
 
     fn append_reserved_program(&self, programs: &[Program]) -> anyhow::Result<()> {
-        fs::File::create(self.inner.reserved_state_file_path.as_path())?;
         let reserved_program_ids = ProgramId::parse_from_string(fs::read_to_string(
             self.inner.reserved_state_file_path.as_path(),
         )?)?;
