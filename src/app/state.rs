@@ -189,6 +189,7 @@ impl RecorderState {
     }
 
     fn append_reserved_program(&self, programs: &[Program]) -> anyhow::Result<()> {
+        fs::File::create(self.inner.reserved_state_file_path.as_path())?;
         let reserved_program_ids = ProgramId::parse_from_string(fs::read_to_string(
             self.inner.reserved_state_file_path.as_path(),
         )?)?;
