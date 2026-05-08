@@ -11,8 +11,10 @@ use crate::{
     commands::common::{collect_program_selectors, resolve_programs},
 };
 use std::{
+    fs,
     io::{BufWriter, Write},
     sync::Arc,
+    time::Duration,
 };
 use tracing::{debug, error, info};
 
@@ -112,13 +114,18 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
                 program.end_time,
             )
             .await?;
-        stream_handler
+        let recorded_file_path = stream_handler
             .download_timefree_program(
                 media_list_urls,
                 program.output_dir(recorder_state.app_state().output_dir()),
                 &program.output_filename(),
             )
             .await?;
+        let recorded_file = fs::File::open(recorded_file_path)?;
+        StreamHandler::verify_recorded_file_bytes(
+            recorded_file.metadata()?,
+            Duration::from_secs(program.on_air_duration().0),
+        )?;
         recorder_state.remove_reserved_program(program.program_id())?
     }
 

@@ -138,7 +138,7 @@ impl StreamHandler {
         media_list_urls: Vec<String>,
         output_dir: PathBuf,
         file_name: &str,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PathBuf> {
         // medialistのmediasequence_segmentsequenceとして並び替え可能な音声セグメントを取得する
         // 全てダウンロードしたら並び替えて一ファイルに結合する
         let mut audio_segments: Vec<AudioSegment> = stream::iter(media_list_urls)
@@ -155,11 +155,12 @@ impl StreamHandler {
         audio_segments.sort_by_key(|a| a.sequence);
 
         tokio::fs::create_dir_all(output_dir.clone()).await?;
+        let recording_file_path = Path::new(&output_dir).join(file_name);
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .write(true)
-            .open(Path::new(&output_dir).join(file_name))
+            .open(recording_file_path.clone())
             .await?;
         for audio_segment in &audio_segments {
             file.write_all(&audio_segment.audio_bytes).await?;
@@ -167,7 +168,7 @@ impl StreamHandler {
         file.flush().await?;
         drop(audio_segments);
 
-        Ok(())
+        Ok(recording_file_path)
     }
 
     async fn collect_audio_segments(
@@ -221,7 +222,7 @@ impl StreamHandler {
         Ok(audio_segments)
     }
 
-    fn verify_recorded_file_bytes(
+    pub fn verify_recorded_file_bytes(
         file_metadata: Metadata,
         recording_duration: Duration,
     ) -> anyhow::Result<()> {
