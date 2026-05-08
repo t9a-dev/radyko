@@ -44,7 +44,7 @@ mod test_helper {
         match auth_type {
             AuthType::Normal => {
                 RADIKO_AUTH
-                    .get_or_init(|| async { RadikoAuth::new().await })
+                    .get_or_init(|| async { RadikoAuth::new().await.unwrap() })
                     .await
             }
             AuthType::AreaFree => {
@@ -58,6 +58,7 @@ mod test_helper {
                             credential.password.expose_secret(),
                         )
                         .await
+                        .unwrap()
                     })
                     .await
             }
