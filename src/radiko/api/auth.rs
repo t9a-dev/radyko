@@ -48,17 +48,16 @@ struct LoginResponse {
 }
 
 impl RadikoAuth {
-    pub async fn new() -> Self {
-        Self::init(None, None).await.unwrap()
+    pub async fn new() -> anyhow::Result<Self> {
+        Self::init(None, None).await
     }
 
-    pub async fn new_area_free(email_address: &str, password: &str) -> Self {
+    pub async fn new_area_free(email_address: &str, password: &str) -> anyhow::Result<Self> {
         Self::init(
             Some(SecretString::new(email_address.into())),
             Some(SecretString::new(password.into())),
         )
         .await
-        .unwrap()
     }
 
     pub fn area_id(&self) -> Cow<'_, str> {
@@ -90,10 +89,9 @@ impl RadikoAuth {
     }
 
     async fn init(mail: Option<SecretString>, pass: Option<SecretString>) -> Result<Self> {
-        let is_area_free = mail.is_some() && pass.is_some();
         let auth1_url = Endpoint::auth1_endpoint();
         let auth2_url = Endpoint::auth2_endpoint();
-        let auth_key = Self::get_public_auth_key().await;
+        let auth_key = Self::get_public_auth_key().await?;
 
         // get area_id
         let response_body = Client::new()
@@ -110,14 +108,13 @@ impl RadikoAuth {
         let default_area_id = area_id_caps[0].to_string();
 
         // login
-        let cookie: Arc<cookie::Jar> = if is_area_free {
-            RadikoAuth::login(
-                mail.clone().unwrap().expose_secret(),
-                pass.clone().unwrap().expose_secret(),
-            )
-            .await?
-        } else {
-            Arc::new(Jar::default())
+        let (is_area_free, cookie) = match (mail.clone(), pass.clone()) {
+            (Some(mail), Some(pass)) => (
+                true,
+                RadikoAuth::login(mail.clone().expose_secret(), pass.clone().expose_secret())
+                    .await?,
+            ),
+            _ => (false, Arc::new(Jar::default())),
         };
         let logined_client = Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -197,17 +194,18 @@ impl RadikoAuth {
         })
     }
 
-    async fn get_public_auth_key() -> String {
+    async fn get_public_auth_key() -> anyhow::Result<String> {
         // https://github.com/miyagawa/ripdiko/blob/e9080f99c4c45b112256d822802f3dd56ab908f1/bin/ripdiko#L66
         let url = "https://radiko.jp/apps/js/playerCommon.js";
-        let response_body = reqwest::get(url).await.unwrap().text().await.unwrap();
+        let response_body = reqwest::get(url).await?.text().await?;
         let auth_key_pattern =
-            regex::Regex::new(r"new RadikoJSPlayer\(.*?,.*?,.'(?P<auth_key>\w+)'").unwrap();
+            regex::Regex::new(r"new RadikoJSPlayer\(.*?,.*?,.'(?P<auth_key>\w+)'")?;
         let Some(auth_key_caps) = auth_key_pattern.captures(&response_body) else {
-            panic!("failed get auth_key ")
+            // public key from https://radiko.jp/apps/js/playerCommon.js
+            return Ok("bcd151073c03b352e1ef2fd66c32209da9ca0afa".to_string());
         };
 
-        auth_key_caps["auth_key"].to_string()
+        Ok(auth_key_caps["auth_key"].to_string())
     }
 
     async fn login(mail: &str, pass: &str) -> Result<Arc<cookie::Jar>> {

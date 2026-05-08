@@ -1,5 +1,7 @@
 use std::io::{self, BufWriter, Write};
 
+use tracing::error;
+
 use crate::{cli::SearchArgs, radiko::RadikoClient};
 
 #[tracing::instrument(name = "cli_command_search")]
@@ -15,9 +17,12 @@ pub async fn run(args: SearchArgs) -> anyhow::Result<()> {
     // programsは100も行かないので、記述量の増加を回収できるとは思わないが、学習のためということで良しとする。
     let stdio = io::stdout();
     let mut writer = BufWriter::new(stdio.lock());
-    programs
+    if let Err(e) = programs
         .into_iter()
-        .for_each(|program| writeln!(writer, "{}", program.get_info()).unwrap());
+        .try_for_each(|program| writeln!(writer, "{}", program.get_info()))
+    {
+        error!("failed wirte program info to stdout: {:#?}", e);
+    };
     writer.flush()?;
 
     Ok(())

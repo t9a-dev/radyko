@@ -3,9 +3,9 @@ use opentelemetry::{
     trace::{Span, Tracer, TracerProvider},
 };
 use opentelemetry_sdk::{Resource, trace::SdkTracerProvider};
-use tracing::{info, level_filters::LevelFilter};
+use tracing::{error, info, level_filters::LevelFilter};
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::{EnvFilter, Registry, fmt, layer::SubscriberExt};
+use tracing_subscriber::{EnvFilter, Registry, filter::Directive, fmt, layer::SubscriberExt};
 
 pub static RADYKO_TRACER: std::sync::OnceLock<opentelemetry::global::BoxedTracer> =
     std::sync::OnceLock::new();
@@ -19,15 +19,20 @@ pub fn init_telemetry(
     service_name: &str,
     level_arg: Option<&str>,
 ) -> Option<opentelemetry_sdk::trace::SdkTracerProvider> {
-    let default_env_filter_directive = if cfg!(debug_assertions) {
+    let default_env_filter_directive: Directive = if cfg!(debug_assertions) {
         LevelFilter::INFO.into()
     } else {
         LevelFilter::ERROR.into()
     };
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(default_env_filter_directive)
+    let Ok(env_filter) = EnvFilter::builder()
+        .with_default_directive(default_env_filter_directive.clone())
         .parse(level_arg.unwrap_or(""))
-        .unwrap();
+    else {
+        error!(
+            "failed env_filter build default_env_filter_directive: {default_env_filter_directive:#?} level_arg: {level_arg:#?}"
+        );
+        return None;
+    };
     let timer_format = tracing_subscriber::fmt::time::LocalTime::rfc_3339();
     let fmt_layer = fmt::Layer::default()
         .with_timer(timer_format)

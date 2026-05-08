@@ -161,14 +161,12 @@ impl RadikoClient {
         email_address: Option<&str>,
         password: Option<&str>,
     ) -> anyhow::Result<RadikoClientRef> {
-        let is_area_free = email_address.is_some() && password.is_some();
-        let radiko_auth = if is_area_free {
-            RadikoAuth::new_area_free(email_address.unwrap(), password.unwrap()).await
-        } else {
-            RadikoAuth::new().await
+        let radiko_auth = match (email_address, password) {
+            (Some(email), Some(pass)) => RadikoAuth::new_area_free(email, pass).await,
+            _ => RadikoAuth::new().await,
         };
 
-        Ok(Self::build_inner(radiko_auth))
+        Ok(Self::build_inner(radiko_auth?))
     }
 
     fn build_inner(radiko_auth: RadikoAuth) -> RadikoClientRef {

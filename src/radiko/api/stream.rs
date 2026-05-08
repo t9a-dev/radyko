@@ -61,8 +61,7 @@ impl RadikoStream {
                     "failed load medialist url MasterPlaylist Content: {:#?}",
                     master_playlist
                 )
-            })
-            .unwrap()
+            })?
             .into())
     }
 

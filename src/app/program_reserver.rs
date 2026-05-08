@@ -144,13 +144,14 @@ impl ProgramReserver {
         tokio::spawn(
             async move {
                 program.wait_for_on_air().await;
-                let refreshed_radiko_client = this
-                    .inner
-                    .radiko_client
-                    .refresh_auth()
-                    .await
-                    .map_err(|e| error!("refresh radiko client error: {:#?}", e))
-                    .unwrap();
+                let refreshed_radiko_client = match this.inner.radiko_client.refresh_auth().await {
+                    Ok(refreshed_client) => refreshed_client,
+                    Err(e) => {
+                        error!("failed refresh radiko client: {:#?}", e);
+                        // トークンのリフレッシュに失敗したら、そのまま現状のクライアントを使う
+                        this.inner.radiko_client.clone()
+                    }
+                };
                 if let Err(e) = tokio::fs::create_dir_all(program.output_dir()).await {
                     error!("create recording dir error: {:#?}", e)
                 };

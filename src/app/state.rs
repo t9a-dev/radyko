@@ -76,13 +76,18 @@ impl AppState {
     }
 
     pub fn output_dir(&self) -> PathBuf {
-        self.config.read().unwrap().recording.output_dir.clone()
+        self.config
+            .read()
+            .expect("config RwLock poisoned")
+            .recording
+            .output_dir
+            .clone()
     }
 
     pub fn schedule_update_interval_secs(&self) -> u64 {
         self.config
             .read()
-            .unwrap()
+            .expect("config RwLock poisoned")
             .recording
             .schedule_update_interval_secs
     }
@@ -130,15 +135,14 @@ impl RecorderState {
     }
 
     pub fn add_reserve_programs(&self, programs: Vec<Program>) -> Vec<Program> {
+        let mut reserved_programs_guard = self
+            .inner
+            .reserved_programs
+            .write()
+            .expect("reserved_programs RwLock poisoned");
         let reserved_programs = programs
             .into_iter()
-            .filter(|program| {
-                self.inner
-                    .reserved_programs
-                    .write()
-                    .unwrap()
-                    .insert(program.program_id())
-            })
+            .filter(|program| reserved_programs_guard.insert(program.program_id()))
             .collect::<Vec<_>>();
 
         if let Err(e) = self.append_reserved_program(&reserved_programs) {
@@ -152,14 +156,18 @@ impl RecorderState {
         self.inner
             .reserved_programs
             .write()
-            .unwrap()
+            .expect("reserved_programs RwLock poisoned")
             .remove(&program_id);
         self.delete_reserved_program(program_id)
     }
 
     pub fn reload_config(&self, config_path: PathBuf) -> anyhow::Result<()> {
         let radyko_config = RadykoConfig::parse_from_path(config_path)?;
-        let mut config_guard = self.app_state.config.write().unwrap();
+        let mut config_guard = self
+            .app_state
+            .config
+            .write()
+            .expect("app_state config RwLock poisoned");
         *config_guard = radyko_config;
         drop(config_guard);
 
@@ -175,7 +183,12 @@ impl RecorderState {
     }
 
     pub fn recording_config(&self) -> RecordingConfig {
-        self.app_state.config.read().unwrap().recording.clone()
+        self.app_state
+            .config
+            .read()
+            .expect("app_state.config RwLock poisoned")
+            .recording
+            .clone()
     }
 
     pub fn schedule_update_interval_secs(&self) -> u64 {

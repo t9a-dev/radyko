@@ -18,13 +18,9 @@ use tracing::{debug, error, info};
 
 // 構造体の内容がまるごと表示されてノイズになるので出力対象外にしている。skip(recorder_state)
 #[tracing::instrument(name = "cli_command_recorder" skip(args))]
-pub async fn run(args: RecorderArgs) {
-    let app_state = Arc::new(
-        AppState::build_from_recorder_args(args.clone())
-            .await
-            .unwrap(),
-    );
-    Utils::is_writable_output_dir(app_state.output_dir().to_str().unwrap());
+pub async fn run(args: RecorderArgs) -> anyhow::Result<()> {
+    let app_state = Arc::new(AppState::build_from_recorder_args(args.clone()).await?);
+    Utils::is_writable_output_dir(&app_state.output_dir().to_string_lossy());
 
     // 録音ファイル出力ディレクトリ直下に録音予約管理ファイルを配置することでコンテナ環境でも追加の設定無しに永続化される
     let reserved_state_file_path = app_state.output_dir().join("reserved_programs");
@@ -61,7 +57,12 @@ async fn reserve(
     tx: tokio::sync::mpsc::Sender<RecordingEvent>,
 ) -> anyhow::Result<()> {
     info!("local now: {}", chrono::Local::now());
-    let program_selectors = collect_program_selectors(&recorder_state.config().read().unwrap())?;
+    let program_selectors = collect_program_selectors(
+        &recorder_state
+            .config()
+            .read()
+            .expect("recorder_state config RwLock poisoned"),
+    )?;
     let programs = resolve_programs(recorder_state.app_state(), program_selectors).await?;
 
     // println!(): programsをforで回しながらprintln!()するとprintln!()のたびにstdioをロックする。
