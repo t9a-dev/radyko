@@ -5,7 +5,7 @@ use crate::{
         program_resolver,
         state::{AppState, RecorderState},
         types::RecordingEvent,
-        utils::Utils,
+        utils::{self, Utils},
     },
     cli::RecorderArgs,
     commands::common::{collect_program_selectors, resolve_programs},
@@ -58,7 +58,7 @@ async fn reserve(
     recorder_state: Arc<RecorderState>,
     tx: tokio::sync::mpsc::Sender<RecordingEvent>,
 ) -> anyhow::Result<()> {
-    info!("local now: {}", chrono::Local::now());
+    info!("local now: {}", utils::Utils::formated_now_in_tz_tokyo()?);
     let program_selectors = collect_program_selectors(
         &recorder_state
             .config()
@@ -110,8 +110,8 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
             .clone()
             .collect_timefree_medialist_urls(
                 program.station_id.clone(),
-                program.start_time,
-                program.end_time,
+                program.start_time.clone(),
+                program.end_time.clone(),
             )
             .await?;
         let recorded_file_path = stream_handler

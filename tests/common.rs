@@ -5,9 +5,7 @@ pub mod tests_common {
     use std::io::BufReader;
     use std::io::Cursor;
 
-    use chrono::DateTime;
-    use chrono_tz::Tz;
-
+    use jiff::Zoned;
     use radyko::app::config;
     use radyko::model::Program;
     use radyko::{app::config::RadykoConfig, radiko::RadikoClient};
@@ -35,12 +33,12 @@ pub mod tests_common {
     }
 
     pub trait TestProgram {
-        fn with_start_end_time(&self, start: DateTime<Tz>, end: DateTime<Tz>) -> Self;
+        fn with_start_end_time(&self, start: Zoned, end: Zoned) -> Self;
     }
 
     impl TestProgram for Program {
         /// テスト用に放送時間を差し替えたProgramを返す
-        fn with_start_end_time(&self, start: DateTime<Tz>, end: DateTime<Tz>) -> Self {
+        fn with_start_end_time(&self, start: Zoned, end: Zoned) -> Self {
             Self {
                 start_time: start,
                 end_time: end,

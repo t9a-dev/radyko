@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Days};
-use chrono_tz::Tz;
+use jiff::{ToSpan, Zoned};
 use reqwest::Client;
 
 use crate::{
@@ -98,7 +97,7 @@ impl RadikoClient {
         &self,
         keyword: String,
         station_id: Option<&str>,
-        start_day: Option<DateTime<Tz>>,
+        start_day: Option<Zoned>,
     ) -> anyhow::Result<Programs> {
         let mut condition = RadikoSearchCondition::new();
         let _ = condition.filter.insert(Filter::Timefree);
@@ -110,13 +109,11 @@ impl RadikoClient {
         let start_day_format = "%Y-%m-%d";
         let start_day = start_day.unwrap_or(
             // 指定が無い時はタイムフリーの制約である1週間前を設定する
-            Utils::now_with_timezone_tokyo()
-                .checked_sub_days(Days::new(7))
-                .unwrap(),
+            Utils::now_in_tz_tokyo().checked_sub(7.days())?,
         );
         let _ = condition
             .start_day
-            .insert(start_day.format(start_day_format).to_string());
+            .insert(start_day.strftime(start_day_format).to_string());
 
         self.inner.search.find_program(&condition).await
     }
@@ -130,7 +127,7 @@ impl RadikoClient {
 
     pub async fn find_program(
         &self,
-        start_at: DateTime<Tz>,
+        start_at: Zoned,
         station_id: &str,
     ) -> anyhow::Result<Option<Program>> {
         self.inner.program.find_program(station_id, start_at).await
@@ -139,8 +136,8 @@ impl RadikoClient {
     pub async fn collect_timefree_medialist_urls(
         &self,
         station_id: String,
-        start_at: DateTime<Tz>,
-        end_at: DateTime<Tz>,
+        start_at: Zoned,
+        end_at: Zoned,
     ) -> anyhow::Result<Vec<String>> {
         self.inner
             .stream
@@ -198,11 +195,14 @@ mod tests {
         let first_program = timefree_programs.data.first().unwrap();
         println!(
             "first_program_start_time: {}",
-            first_program.start_time.format(Endpoint::DATETIME_FORMAT)
+            first_program
+                .start_time
+                .clone()
+                .strftime(Endpoint::DATETIME_FORMAT)
         );
         // 適当に選んだ番組情報から同じ番組情報を見つけられれば良い
         let program = radiko_client
-            .find_program(first_program.start_time, &first_program.station_id)
+            .find_program(first_program.start_time.clone(), &first_program.station_id)
             .await?;
 
         assert!(program.is_some());

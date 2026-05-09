@@ -6,8 +6,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use chrono::{DateTime, Utc};
-use chrono_tz::{Asia::Tokyo, Tz};
+use jiff::Zoned;
 use secrecy::ExposeSecret;
 use tempfile::TempDir;
 use tracing::error;
@@ -16,6 +15,7 @@ use crate::{
     app::{
         config::{RadykoConfig, RecordingConfig},
         credential::RadikoCredential,
+        utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
     model::{
@@ -119,17 +119,14 @@ impl RecorderState {
         Self { app_state, inner }
     }
 
-    pub fn collect_aired_program_ids(
-        &self,
-        now: Option<DateTime<Tz>>,
-    ) -> anyhow::Result<Vec<ProgramId>> {
-        let now = now.unwrap_or(Utc::now().with_timezone(&Tokyo));
+    pub fn collect_aired_program_ids(&self, now: Option<Zoned>) -> anyhow::Result<Vec<ProgramId>> {
+        let now = now.unwrap_or(Utils::now_in_tz_tokyo());
 
         Ok(self
             .get_reserved_program_ids()?
             .into_iter()
             .filter(|p| {
-                let EndAt(end_at) = p.2;
+                let EndAt(end_at) = &p.2;
                 end_at < now
             })
             .collect())
@@ -242,10 +239,10 @@ impl RecorderState {
 mod tests {
     use std::{io::Read, path::PathBuf, sync::Arc};
 
-    use chrono::{NaiveDateTime, TimeDelta, TimeZone};
-    use chrono_tz::Asia::Tokyo;
+    use jiff::{ToSpan, Zoned, civil::DateTime};
 
     use crate::{
+        RADYKO_TZ_NAME,
         app::state::{AppState, RecorderState},
         model::{
             Program,
@@ -253,6 +250,8 @@ mod tests {
         },
         test_helper::{load_example_config, radiko_client},
     };
+
+    const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
     async fn setup_recorder_state(
         reserved_programs_file_path: PathBuf,
@@ -268,13 +267,10 @@ mod tests {
         let recorder_state =
             setup_recorder_state(reserved_programs_file.path().to_path_buf()).await?;
 
-        let on_air_duration = TimeDelta::hours(1);
-        let start_at = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("2000-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
-        let end_at = start_at.checked_add_signed(on_air_duration).unwrap();
+        let on_air_duration = 1.hours();
+        let start_at =
+            DateTime::strptime(DATETIME_FORMAT, "2000-01-01 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
+        let end_at = start_at.checked_add(on_air_duration).unwrap();
         let mut program = Program::new(start_at, end_at);
         program.station_id = "LFR".to_string();
 
@@ -290,20 +286,14 @@ mod tests {
         );
 
         // 放送が終了していない番組情報は取得できない
-        let now = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("1999-04-02 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
+        let now =
+            DateTime::strptime(DATETIME_FORMAT, "1999-04-02 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
         let program_ids = recorder_state.collect_aired_program_ids(Some(now))?;
         assert!(program_ids.is_empty());
 
         // 放送が終了している番組情報が取得できる
-        let now = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("2000-04-02 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
+        let now =
+            DateTime::strptime(DATETIME_FORMAT, "2000-04-02 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
         let program_ids = recorder_state.collect_aired_program_ids(Some(now))?;
         assert_eq!(program_ids.iter().count(), 1);
         assert_eq!(program_ids.first().unwrap().0, StationId("LFR".to_string()));
@@ -317,13 +307,10 @@ mod tests {
         let recorder_state =
             setup_recorder_state(reserved_programs_file.path().to_path_buf()).await?;
 
-        let on_air_duration = TimeDelta::hours(1);
-        let start_at = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("2000-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
-        let end_at = start_at.checked_add_signed(on_air_duration).unwrap();
+        let on_air_duration = 1.hours();
+        let start_at =
+            DateTime::strptime(DATETIME_FORMAT, "2000-01-01 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
+        let end_at = start_at.checked_add(on_air_duration).unwrap();
         let mut program = Program::new(start_at, end_at);
         program.station_id = "LFR".to_string();
 

@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
-use chrono::DateTime;
-use chrono_tz::Tz;
-
 use futures::{StreamExt, TryStreamExt, stream};
+use jiff::Zoned;
 use tracing::warn;
 
 use crate::{
@@ -23,7 +21,7 @@ pub async fn resolve_program_id(
     let programs = stream::iter(ids.iter())
         .map(|id| {
             let radiko_client = radiko_client.clone();
-            async move { radiko_client.find_program(id.1.0, &id.0.0).await }
+            async move { radiko_client.find_program(id.clone().1.0, &id.0.0).await }
         })
         .buffer_unordered(RADYKO_CONCURRENCY)
         .try_filter_map(|program| async move { Ok(program) })
@@ -86,12 +84,12 @@ async fn resolve_start_times(
     start_times: StartTimes,
     station_id: &str,
 ) -> anyhow::Result<Vec<Program>> {
-    let start_time_to_program: HashMap<DateTime<Tz>, Program> = radiko_client
+    let start_time_to_program: HashMap<Zoned, Program> = radiko_client
         .weekly_programs(station_id)
         .await?
         .data
         .into_iter()
-        .map(|program| (program.start_time, program))
+        .map(|program| (program.clone().start_time, program))
         .collect();
 
     let mut programs = Vec::new();

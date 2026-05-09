@@ -55,8 +55,8 @@ mod timefree_test {
         let medialist_urls = radiko_client
             .collect_timefree_medialist_urls(
                 dummy_program.station_id.to_string(),
-                dummy_program.start_time,
-                dummy_program.end_time,
+                dummy_program.start_time.clone(),
+                dummy_program.end_time.clone(),
             )
             .await?;
         assert!(medialist_urls.is_empty().not());
@@ -93,8 +93,8 @@ mod timefree_test {
         let medialist_urls = radiko_client
             .collect_timefree_medialist_urls(
                 dummy_program.station_id.to_string(),
-                dummy_program.start_time,
-                dummy_program.end_time,
+                dummy_program.start_time.clone(),
+                dummy_program.end_time.clone(),
             )
             .await?;
         assert!(medialist_urls.is_empty().not());

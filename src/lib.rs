@@ -6,17 +6,21 @@ pub mod model;
 pub mod radiko;
 pub mod telemetry;
 
+pub const RADYKO_TZ_NAME: &str = "Asia/Tokyo";
 pub const RADYKO_CONCURRENCY: usize = 8;
 #[cfg(test)]
 pub mod test_helper {
 
     use std::io::{BufReader, Cursor};
 
+    use anyhow::Context;
+    use jiff::{Zoned, civil::DateTime};
     use reqwest::Client;
     use secrecy::ExposeSecret;
     use tokio::sync::{self, OnceCell};
 
     use crate::{
+        RADYKO_TZ_NAME,
         app::{
             config::{self, RadykoConfig},
             credential::RadikoCredential,
@@ -57,5 +61,14 @@ pub mod test_helper {
                 .unwrap()
             })
             .await
+    }
+
+    /// "%Y-%m-%d %H:%M:%S" -> Zoned in Asia/Tokyo
+    pub fn parse_datetime_in_tz_tokyo(s: &str) -> Zoned {
+        DateTime::strptime("%Y-%m-%d %H:%M:%S", s)
+            .with_context(|| format!("parse_datetime_in_tz_tokyo error s: {s}"))
+            .unwrap()
+            .in_tz(RADYKO_TZ_NAME)
+            .unwrap()
     }
 }

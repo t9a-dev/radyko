@@ -5,8 +5,7 @@ mod recording_program_test {
     use std::{path::PathBuf, sync::Arc, time::Duration};
 
     use crate::common::tests_common::TestProgram;
-    use chrono::{TimeDelta, Utc};
-    use chrono_tz::Asia::Tokyo;
+    use jiff::{ToSpan, Zoned, tz::TimeZone};
     use radyko::{
         app::{
             config::{RecordingConfig, RecordingDurationBufferConfig},
@@ -37,13 +36,12 @@ mod recording_program_test {
             radiko_client.clone(),
             recording_config,
         ));
-        let now = Utc::now().with_timezone(&Tokyo);
+        let now = Zoned::now().in_tz("UTC")?;
         let recording_duration_secs = 5;
         // 今放送している適当な番組を録音
         let test_reserve_program = now_on_air_programs[0].with_start_end_time(
-            now,
-            now.checked_add_signed(TimeDelta::seconds(recording_duration_secs))
-                .unwrap(),
+            now.clone(),
+            now.checked_add(recording_duration_secs.seconds())?,
         );
         let (tx, _rx) = tokio::sync::mpsc::channel(100);
         program_reserver.reserve(test_reserve_program, tx).await?;

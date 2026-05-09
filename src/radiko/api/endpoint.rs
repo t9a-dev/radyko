@@ -1,5 +1,4 @@
-use chrono::DateTime;
-use chrono_tz::Tz;
+use jiff::Zoned;
 
 const V2_URL: &str = "https://radiko.jp/v2/";
 const V3_URL: &str = "https://radiko.jp/v3/";
@@ -56,11 +55,11 @@ impl Endpoint {
     /// weekly_programs_endpoint の利用を推奨
     // radiko apiの仕様で深夜3時から始まる番組は前日の番組表にしか含まれないので注意
     // 2026/01/15/03:00~の番組情報は2026/01/15の番組表には含まれず2026/01/14の番組表に含まれる
-    pub fn date_programs_endpoint(station_id: &str, date: DateTime<Tz>) -> String {
+    pub fn date_programs_endpoint(station_id: &str, date: Zoned) -> String {
         format!(
             "{}program/v3/date/{}/station/{}.xml",
             API_URL,
-            date.format("%Y%m%d"),
+            date.strftime("%Y%m%d"),
             station_id
         )
     }
@@ -116,15 +115,15 @@ impl Endpoint {
     /// 無料プランタイムフリーエンドポイント
     pub fn timefree_playlist_create_url_endpoint(
         station_id: &str,
-        start_at: &DateTime<Tz>,
-        end_at: &DateTime<Tz>,
-        seek: &DateTime<Tz>,
+        start_at: &Zoned,
+        end_at: &Zoned,
+        seek: &Zoned,
         lsid: &str,
     ) -> String {
         let (start_at, end_at, seek) = (
-            start_at.format(Self::DATETIME_FORMAT),
-            end_at.format(Self::DATETIME_FORMAT),
-            seek.format(Self::DATETIME_FORMAT),
+            start_at.strftime(Self::DATETIME_FORMAT).to_string(),
+            end_at.strftime(Self::DATETIME_FORMAT).to_string(),
+            seek.strftime(Self::DATETIME_FORMAT).to_string(),
         );
         format!(
             "https://tf-f-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8?station_id={}&start_at={}&ft={}&end_at={}&to={}&seek={}&preroll=0&l=15&lsid={}&type=b",
@@ -135,15 +134,15 @@ impl Endpoint {
     /// エリアフリープラン会員タイムフリーエンドポイント
     pub fn timefree_for_area_free_playlist_create_url_endpoint(
         station_id: &str,
-        start_at: &DateTime<Tz>,
-        end_at: &DateTime<Tz>,
-        seek: &DateTime<Tz>,
+        start_at: &Zoned,
+        end_at: &Zoned,
+        seek: &Zoned,
         lsid: &str,
     ) -> String {
         let (start_at, end_at, seek) = (
-            start_at.format(Self::DATETIME_FORMAT),
-            end_at.format(Self::DATETIME_FORMAT),
-            seek.format(Self::DATETIME_FORMAT),
+            start_at.strftime(Self::DATETIME_FORMAT).to_string(),
+            end_at.strftime(Self::DATETIME_FORMAT).to_string(),
+            seek.strftime(Self::DATETIME_FORMAT).to_string(),
         );
         format!(
             "https://tf-c-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8?station_id={}&start_at={}&ft={}&end_at={}&to={}&seek={}&preroll=0&l=15&lsid={}&type=c",
@@ -154,11 +153,13 @@ impl Endpoint {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{DateTime, NaiveDateTime, TimeZone};
-    use chrono_tz::{Asia::Tokyo, Tz};
+    use anyhow::Context;
+    use jiff::{Zoned, civil::DateTime};
 
     use super::Endpoint;
-    use crate::{constants::test_constants::TEST_STATION_ID, radiko::api::utils::Utils};
+    use crate::{
+        RADYKO_TZ_NAME, constants::test_constants::TEST_STATION_ID, radiko::api::utils::Utils,
+    };
 
     #[test]
     fn area_id_endpoint_test() {
@@ -276,11 +277,11 @@ mod tests {
         )
     }
 
-    fn datetime_parse_from_string(s: &str) -> DateTime<Tz> {
-        Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str(s, Endpoint::DATETIME_FORMAT).unwrap(),
-            )
+    fn datetime_parse_from_string(s: &str) -> Zoned {
+        DateTime::strptime(Endpoint::DATETIME_FORMAT, s)
+            .with_context(|| format!("datetime_parse_from_string error s: {s}"))
+            .unwrap()
+            .in_tz(RADYKO_TZ_NAME)
             .unwrap()
     }
 
