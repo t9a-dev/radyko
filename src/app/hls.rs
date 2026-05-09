@@ -40,7 +40,7 @@
 */
 
 use std::{
-    fs::Metadata,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -58,6 +58,19 @@ use tokio::{
 use tracing::{Instrument, error, info, info_span, trace, warn};
 
 use crate::RADYKO_CONCURRENCY;
+
+#[derive(Debug)]
+pub struct ByteSize(u64);
+
+impl ByteSize {
+    pub fn from_bytes(bytes: u64) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(self) -> u64 {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct StreamHandler {
@@ -130,7 +143,7 @@ impl StreamHandler {
 
         // 録音時間からファイルサイズを計算して正常に録音できているか検証する
         // 結果はResultで返して呼び出し側に伝搬させる
-        Self::verify_recorded_file_bytes(file.metadata().await?, recording_duration)
+        Self::verify_recorded_file(ByteSize(file.metadata().await?.size()), recording_duration)
     }
 
     pub async fn download_timefree_program(
@@ -222,37 +235,48 @@ impl StreamHandler {
         Ok(audio_segments)
     }
 
-    pub fn verify_recorded_file_bytes(
-        file_metadata: Metadata,
+    /// 録音ファイルサイズが下限サイズ(約5秒の欠落を許容)を満たしているかをチェックします
+    pub fn verify_recorded_file(
+        byte_size: ByteSize,
         recording_duration: Duration,
     ) -> anyhow::Result<()> {
-        // 全体的に冗長な感じもするがpanicするよりはマシだろうという感じ
-        let Some(expected_file_bytes) = recording_duration
+        // 全体的に冗長な感じもするがpanicしないことを優先
+        const TOLERANCE_SECS: u64 = 5;
+        if recording_duration.as_secs() <= TOLERANCE_SECS {
+            bail!(
+                "recording_duration must be greater than 5 seconds recording_duration: {}",
+                recording_duration.as_secs()
+            );
+        }
+
+        let expected_file_bytes = recording_duration
             .as_secs()
             .checked_mul(Self::BYTES_PER_SECS)
-        else {
-            bail!("failed calculate expected_file_bytes");
-        };
-        // 前後5秒分サイズの欠落を許容する
-        let Some(tolerance_bytes) = 5_i32.checked_mul(Self::BYTES_PER_SECS.try_into()?) else {
-            bail!("failed tolerance_bytes");
-        };
-        let (Some(expected_bytes_start), Some(expected_bytes_end)) = (
-            expected_file_bytes.checked_sub(tolerance_bytes.try_into()?),
-            expected_file_bytes.checked_add(tolerance_bytes.try_into()?),
-        ) else {
-            bail!("failed calculate expected_bytes");
-        };
-        let actual_file_bytes = file_metadata.len();
+            .with_context(|| {
+                format!(
+                    "failed calculate expected_file_bytes recording_duration: {recording_duration:#?}"
+                )
+            })?;
+        // 約5秒分のサイズ欠落を許容する
+        let tolerance_bytes = TOLERANCE_SECS
+            .checked_mul(Self::BYTES_PER_SECS)
+            .context("failed tolerance_bytes")?;
+        let expected_lower_file_bytes = expected_file_bytes
+            .checked_sub(tolerance_bytes)
+            .with_context(|| format!("failed calculate expected_bytes expected_file_bytes: {expected_file_bytes} tolerance_bytes: {tolerance_bytes}"))?;
+        // 下限が0 bytesということは空ファイル以外を全て許容してしまうのでエラーとする
+        if expected_lower_file_bytes == 0 {
+            bail!("expected_lower_file_bytes is 0");
+        }
 
-        if (expected_bytes_start..expected_bytes_end).contains(&actual_file_bytes) {
+        let actual_file_bytes = byte_size.as_bytes();
+        // ファイルサイズから5秒程度の欠落であれば許容する
+        if expected_lower_file_bytes <= actual_file_bytes {
             return Ok(());
         }
+
         bail!(
-            "recorded file verify failed. expected_file_bytes: {} ~ {} actual_file_bytes: {}",
-            expected_bytes_start,
-            expected_bytes_end,
-            actual_file_bytes
+            "recorded file verify failed. expected_lower_file_bytes: {expected_lower_file_bytes} actual_file_bytes: {actual_file_bytes}"
         )
     }
 
@@ -474,7 +498,10 @@ mod tests {
         file.write_all(&buf)?;
         let metadata = file.as_file().metadata()?;
 
-        let result = StreamHandler::verify_recorded_file_bytes(metadata, Duration::from_secs(7200));
+        let result = StreamHandler::verify_recorded_file(
+            ByteSize(metadata.size()),
+            Duration::from_secs(7200),
+        );
         assert!(result.is_ok());
         Ok(())
     }
@@ -488,7 +515,10 @@ mod tests {
         file.write_all(&buf)?;
         let metadata = file.as_file().metadata()?;
 
-        let result = StreamHandler::verify_recorded_file_bytes(metadata, Duration::from_secs(7200));
+        let result = StreamHandler::verify_recorded_file(
+            ByteSize(metadata.size()),
+            Duration::from_secs(7200),
+        );
         assert!(result.is_err());
         Ok(())
     }
