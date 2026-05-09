@@ -263,6 +263,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "radiko apiに依存"]
     async fn get_reserved_program_test() -> anyhow::Result<()> {
         let reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
         let recorder_state =
@@ -312,6 +313,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "radiko apiに依存"]
     async fn add_reserve_program_test() -> anyhow::Result<()> {
         let mut reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
         let recorder_state =

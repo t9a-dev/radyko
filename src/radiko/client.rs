@@ -186,6 +186,7 @@ mod tests {
     use crate::{radiko::api::endpoint::Endpoint, test_helper::radiko_client};
 
     #[tokio::test]
+    #[ignore = "radiko apiに依存"]
     async fn find_program_test() -> anyhow::Result<()> {
         let radiko_client = radiko_client().await;
         let timefree_programs = radiko_client
