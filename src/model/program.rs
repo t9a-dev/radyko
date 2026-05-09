@@ -8,7 +8,6 @@ use jiff::{ToSpan, Zoned, civil::DateTime};
 use radiko::api::endpoint::Endpoint;
 use sanitise_file_name::sanitise;
 use serde_derive::{Deserialize, Serialize};
-use tracing::error;
 
 use crate::{
     RADYKO_TZ_NAME,

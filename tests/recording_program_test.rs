@@ -5,7 +5,7 @@ mod recording_program_test {
     use std::{path::PathBuf, sync::Arc, time::Duration};
 
     use crate::common::tests_common::TestProgram;
-    use jiff::{ToSpan, Zoned, tz::TimeZone};
+    use jiff::{ToSpan, Zoned};
     use radyko::{
         app::{
             config::{RecordingConfig, RecordingDurationBufferConfig},

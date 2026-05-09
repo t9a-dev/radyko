@@ -239,7 +239,7 @@ impl RecorderState {
 mod tests {
     use std::{io::Read, path::PathBuf, sync::Arc};
 
-    use jiff::{ToSpan, Zoned, civil::DateTime};
+    use jiff::{ToSpan, civil::DateTime};
 
     use crate::{
         RADYKO_TZ_NAME,
