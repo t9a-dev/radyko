@@ -15,13 +15,13 @@ clap = { version = "4.6.1", features = ["derive"] }
 cron = "0.16.0"
 dotenvy = "0.15.7"
 hex = "0.4.3"
-hls_m3u8 = "0.5.1"
+hls_m3u8 = "0.7.0"
 log = "0.4.29"
 mimalloc = { version = "0.1.48", features = ["v3"] }
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
 opentelemetry_sdk = "0.31.0"
-quick-xml = { version = "0.39.2", features = ["serialize"] }
+quick-xml = { version = "0.39.3", features = ["serialize"] }
 rand = "0.10.1"
 regex = "1.12.3"
 reqwest = { version = "0.12.28", default-features = false, features = ["cookies", "json","charset", "http2", "hickory-dns", "rustls-tls"] }
@@ -30,7 +30,7 @@ secrecy = "0.10.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_derive = "1.0.228"
 serde_json = "1.0.149"
-serde_with = "3.18.0"
+serde_with = "3.19.0"
 md-5 = "0.11"
 strum_macros = "0.28.0"
 tempfile = "3.27.0"
