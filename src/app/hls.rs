@@ -40,7 +40,6 @@
 */
 
 use std::{
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -143,7 +142,7 @@ impl StreamHandler {
 
         // 録音時間からファイルサイズを計算して正常に録音できているか検証する
         // 結果はResultで返して呼び出し側に伝搬させる
-        Self::verify_recorded_file(ByteSize(file.metadata().await?.size()), recording_duration)
+        Self::verify_recorded_file(ByteSize(file.metadata().await?.len()), recording_duration)
     }
 
     pub async fn download_timefree_program(
@@ -499,7 +498,7 @@ mod tests {
         let metadata = file.as_file().metadata()?;
 
         let result = StreamHandler::verify_recorded_file(
-            ByteSize(metadata.size()),
+            ByteSize(metadata.len()),
             Duration::from_secs(7200),
         );
         assert!(result.is_ok());
@@ -516,7 +515,7 @@ mod tests {
         let metadata = file.as_file().metadata()?;
 
         let result = StreamHandler::verify_recorded_file(
-            ByteSize(metadata.size()),
+            ByteSize(metadata.len()),
             Duration::from_secs(7200),
         );
         assert!(result.is_err());

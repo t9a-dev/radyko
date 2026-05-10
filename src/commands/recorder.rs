@@ -13,7 +13,6 @@ use crate::{
 use std::{
     fs,
     io::{BufWriter, Write},
-    os::unix::fs::MetadataExt,
     sync::Arc,
     time::Duration,
 };
@@ -124,7 +123,7 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
             .await?;
         let recorded_file = fs::File::open(recorded_file_path)?;
         StreamHandler::verify_recorded_file(
-            ByteSize::from_bytes(recorded_file.metadata()?.size()),
+            ByteSize::from_bytes(recorded_file.metadata()?.len()),
             Duration::from_secs(program.on_air_duration().0),
         )?;
         recorder_state.remove_reserved_program(program.program_id())?
