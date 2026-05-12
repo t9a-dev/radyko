@@ -34,8 +34,8 @@ impl RecordingDurationBuffer {
 impl Default for RecordingDurationBuffer {
     fn default() -> Self {
         Self {
-            start: Seconds(60),
-            end: Seconds(60),
+            start: Seconds(0),
+            end: Seconds(0),
         }
     }
 }
@@ -74,15 +74,6 @@ impl ReserveProgram {
         tokio::time::sleep(Duration::from_secs(wait_for_on_air_secs)).await;
     }
 
-    pub fn to_on_air_duration_with_buffer(&self, now: Option<Zoned>) -> Seconds {
-        Seconds(
-            self.program
-                .to_on_air_duration(now)
-                .0
-                .saturating_sub(self.start_buffer.0),
-        )
-    }
-
     pub fn on_air_duration(&self) -> Seconds {
         self.program
             .on_air_duration_with_buffer(self.start_buffer, self.end_buffer)
@@ -102,6 +93,15 @@ impl ReserveProgram {
 
     pub fn output_filename(&self) -> String {
         self.program.output_filename()
+    }
+
+    fn to_on_air_duration_with_buffer(&self, now: Option<Zoned>) -> Seconds {
+        Seconds(
+            self.program
+                .to_on_air_duration(now)
+                .0
+                .saturating_sub(self.start_buffer.0),
+        )
     }
 }
 

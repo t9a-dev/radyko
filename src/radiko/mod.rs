@@ -37,7 +37,7 @@ mod test_helper {
     static RADIKO_PROGRAM: std::sync::OnceLock<RadikoProgram> = std::sync::OnceLock::new();
 
     pub fn reqwest_client() -> &'static reqwest::Client {
-        CLIENT.get_or_init(|| Client::new())
+        CLIENT.get_or_init(Client::new)
     }
 
     pub async fn radiko_auth(auth_type: AuthType) -> &'static RadikoAuth {
@@ -72,7 +72,7 @@ mod test_helper {
     }
 
     pub fn radiko_station() -> &'static RadikoStation {
-        RADIKO_STATION.get_or_init(|| RadikoStation::new())
+        RADIKO_STATION.get_or_init(RadikoStation::new)
     }
 
     pub fn radiko_search() -> &'static RadikoSearch {

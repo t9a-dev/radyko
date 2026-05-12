@@ -251,7 +251,7 @@ mod tests {
     #[ignore = "エリアフリー会員情報を持つことに依存しているテスト"]
     async fn init_area_free_client_smoke() -> Result<()> {
         let auth_manager = radiko_auth(AuthType::AreaFree).await;
-        assert_eq!(auth_manager.area_free(), true);
+        assert!(auth_manager.area_free());
 
         Ok(())
     }
@@ -260,7 +260,7 @@ mod tests {
     #[ignore = "radiko apiに依存"]
     async fn init_not_area_free_client_smoke() -> Result<()> {
         let auth_manager = radiko_auth(AuthType::Normal).await;
-        assert_eq!(auth_manager.area_free(), false);
+        assert!(!auth_manager.area_free());
 
         Ok(())
     }

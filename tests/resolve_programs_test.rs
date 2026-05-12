@@ -24,7 +24,7 @@ mod resolve_programs_test {
         let mut result = Vec::new();
         let program_selectors = ProgramSelector::from_keywords(radyko_config.keywords.unwrap());
         for program_selector in program_selectors {
-            let programs = resolve_selector(&radiko_client, program_selector).await?;
+            let programs = resolve_selector(radiko_client, program_selector).await?;
             result.extend(programs);
         }
 
@@ -43,7 +43,7 @@ mod resolve_programs_test {
         let mut result = Vec::new();
         let program_selectors = ProgramSelector::from_rules(radyko_config.rules.unwrap())?;
         for program_selector in program_selectors {
-            let programs = resolve_selector(&radiko_client, program_selector).await?;
+            let programs = resolve_selector(radiko_client, program_selector).await?;
             result.extend(programs);
         }
 

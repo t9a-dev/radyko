@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        hls::StreamHandler,
+        hls::{ByteSize, StreamHandler},
         program_reserver::ProgramReserver,
         program_resolver,
         state::{AppState, RecorderState},
@@ -106,24 +106,21 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
         .await?;
     let stream_handler = StreamHandler::new(reqwest::Client::new());
     for program in timefree_programs {
-        let media_list_urls = radiko_client
-            .clone()
-            .collect_timefree_medialist_urls(
-                program.station_id.clone(),
-                program.start_time.clone(),
-                program.end_time.clone(),
-            )
-            .await?;
+        let stream_media_list_urls = radiko_client.stream_timefree_medialist_urls(
+            program.station_id.clone(),
+            program.start_time.clone(),
+            program.end_time.clone(),
+        );
         let recorded_file_path = stream_handler
             .download_timefree_program(
-                media_list_urls,
+                stream_media_list_urls,
                 program.output_dir(recorder_state.app_state().output_dir()),
                 &program.output_filename(),
             )
             .await?;
         let recorded_file = fs::File::open(recorded_file_path)?;
-        StreamHandler::verify_recorded_file_bytes(
-            recorded_file.metadata()?,
+        StreamHandler::verify_recorded_file(
+            ByteSize::from_bytes(recorded_file.metadata()?.len()),
             Duration::from_secs(program.on_air_duration().0),
         )?;
         recorder_state.remove_reserved_program(program.program_id())?

@@ -33,7 +33,7 @@ mod tests {
 
         assert!(
             search_programs(
-                &radiko_client,
+                radiko_client,
                 Keyword("オールナイトニッポン".to_string()),
                 Station::Nationwide
             )
@@ -45,7 +45,7 @@ mod tests {
 
         assert!(
             search_programs(
-                &radiko_client,
+                radiko_client,
                 Keyword("クラシック".to_string()),
                 Station::Id(TEST_STATION_ID.to_string())
             )

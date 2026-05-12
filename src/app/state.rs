@@ -262,6 +262,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "radiko apiに依存"]
     async fn get_reserved_program_test() -> anyhow::Result<()> {
         let reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
         let recorder_state =
@@ -275,11 +276,11 @@ mod tests {
         program.station_id = "LFR".to_string();
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&vec![program])?;
+        recorder_state.append_reserved_program(&[program])?;
 
         // 録音予約を全て取得
         let all_reserved_program_ids = recorder_state.get_reserved_program_ids()?;
-        assert_eq!(all_reserved_program_ids.iter().count(), 1);
+        assert_eq!(all_reserved_program_ids.len(), 1);
         assert_eq!(
             all_reserved_program_ids.first().unwrap().0,
             StationId("LFR".to_string())
@@ -295,13 +296,14 @@ mod tests {
         let now =
             DateTime::strptime(DATETIME_FORMAT, "2000-04-02 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
         let program_ids = recorder_state.collect_aired_program_ids(Some(now))?;
-        assert_eq!(program_ids.iter().count(), 1);
+        assert_eq!(program_ids.len(), 1);
         assert_eq!(program_ids.first().unwrap().0, StationId("LFR".to_string()));
 
         Ok(())
     }
 
     #[tokio::test]
+    #[ignore = "radiko apiに依存"]
     async fn add_reserve_program_test() -> anyhow::Result<()> {
         let mut reserved_programs_file = tempfile::NamedTempFile::new_in(".")?;
         let recorder_state =
@@ -315,13 +317,13 @@ mod tests {
         program.station_id = "LFR".to_string();
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&vec![program.clone()])?;
+        recorder_state.append_reserved_program(&[program.clone()])?;
         let mut content = String::new();
         reserved_programs_file.read_to_string(&mut content)?;
         assert_eq!(ProgramId::parse_from_string(content)?.len(), 1);
 
         // 重複した予約情報は登録されない(LFR)
-        recorder_state.append_reserved_program(&vec![program.clone()])?;
+        recorder_state.append_reserved_program(&[program.clone()])?;
         let mut content = String::new();
         reserved_programs_file
             .reopen()?

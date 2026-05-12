@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use futures::Stream;
 use jiff::{ToSpan, Zoned};
 use reqwest::Client;
 
@@ -65,6 +66,19 @@ impl RadikoClient {
             .get_medialist_url_for_live(station_id)
             .await?
             .to_string())
+    }
+
+    pub async fn media_list_url_for_timefree(
+        &self,
+        station_id: String,
+        start_at: Zoned,
+        end_at: Zoned,
+        seek: Zoned,
+    ) -> anyhow::Result<String> {
+        self.inner
+            .stream
+            .get_medialist_url_for_timefree(station_id, start_at, end_at, seek)
+            .await
     }
 
     pub async fn now_on_air_programs(&self, area_id: Option<&str>) -> anyhow::Result<Vec<Program>> {
@@ -133,16 +147,15 @@ impl RadikoClient {
         self.inner.program.find_program(station_id, start_at).await
     }
 
-    pub async fn collect_timefree_medialist_urls(
+    pub fn stream_timefree_medialist_urls(
         &self,
         station_id: String,
         start_at: Zoned,
         end_at: Zoned,
-    ) -> anyhow::Result<Vec<String>> {
+    ) -> impl Stream<Item = anyhow::Result<String>> {
         self.inner
             .stream
-            .collect_timefree_medialist_urls(station_id, start_at, end_at)
-            .await
+            .stream_timefree_medialist_urls(station_id, start_at, end_at)
     }
 
     async fn init(email_address: Option<&str>, password: Option<&str>) -> anyhow::Result<Self> {
@@ -183,6 +196,7 @@ mod tests {
     use crate::{radiko::api::endpoint::Endpoint, test_helper::radiko_client};
 
     #[tokio::test]
+    #[ignore = "radiko apiに依存"]
     async fn find_program_test() -> anyhow::Result<()> {
         let radiko_client = radiko_client().await;
         let timefree_programs = radiko_client

@@ -23,7 +23,7 @@ pub mod tests_common {
         let cursor = Cursor::new(config::EXAMPLE_CONFIG);
         let reader = BufReader::new(cursor);
 
-        Ok(RadykoConfig::parse(reader)?)
+        RadykoConfig::parse(reader)
     }
 
     pub async fn radiko_client() -> &'static RadikoClient {
