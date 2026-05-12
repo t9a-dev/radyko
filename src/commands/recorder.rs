@@ -43,8 +43,7 @@ pub async fn run(args: RecorderArgs) -> anyhow::Result<()> {
             Err(e) => error!("recorder error: {:#?}", e),
         }
         let _ = recording_event_handler(Arc::clone(&recorder_state), rx).await;
-        let shared_recorder_state = Arc::clone(&recorder_state);
-        if let Err(e) = download_timefree_programs(shared_recorder_state).await {
+        if let Err(e) = download_timefree_programs(Arc::clone(&recorder_state)).await {
             error!("timefree download error: {:#?}", e);
         };
         reserve_schedule_update_interval.tick().await;

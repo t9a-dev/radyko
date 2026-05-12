@@ -234,7 +234,7 @@ mod tests {
     };
 
     #[tokio::test]
-    #[ignore = "エリアフリー会員情報を持つことに依存しているテスト"]
+    #[ignore = "radiko apiに依存"]
     async fn area_free_radiko_stream_smoke() -> anyhow::Result<()> {
         let radiko_stream = radiko_stream(AuthType::AreaFree).await;
 

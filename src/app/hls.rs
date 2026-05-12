@@ -112,35 +112,48 @@ impl StreamHandler {
         file_name: &str,
         recording_duration: Duration,
     ) -> anyhow::Result<()> {
-        let end_recording = Instant::now() + recording_duration;
+        let span = info_span!("handle_stream_start_recording", program = file_name);
         tokio::fs::create_dir_all(output_dir.clone()).await?;
+        let file_path = Path::new(&output_dir).join(file_name);
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .write(true)
-            .open(Path::new(&output_dir).join(file_name))
+            .open(file_path.clone())
             .await?;
 
-        let span = info_span!("handle_stream_start_recording", program = file_name);
-        let mut audio_segments_receiver = self.start_read(media_list_url).instrument(span).await?;
-        while let Some(audio_segment) = audio_segments_receiver.recv().await {
-            if end_recording <= Instant::now() {
-                info!("end recording: {}", file_name);
-                drop(audio_segment);
-                drop(audio_segments_receiver);
-                return Ok(());
-            }
+        let recording = async || -> anyhow::Result<()> {
+            let mut audio_segments_receiver =
+                self.start_read(media_list_url).instrument(span).await?;
+            let end_recording = Instant::now() + recording_duration;
 
-            let audio_segment = audio_segment?;
-            file.write_all(&audio_segment).await?;
-            file.flush().await?;
-            trace!("recive segment len: {}", audio_segment.len());
-            drop(audio_segment);
+            while let Some(audio_segment) = audio_segments_receiver.recv().await {
+                if end_recording <= Instant::now() {
+                    info!("end recording: {}", file_name);
+                    drop(audio_segment);
+                    drop(audio_segments_receiver);
+                    return Ok(());
+                }
+
+                let audio_segment = audio_segment?;
+                file.write_all(&audio_segment).await?;
+                file.flush().await?;
+                trace!("recive segment len: {}", audio_segment.len());
+                drop(audio_segment);
+            }
+            // 録音時間からファイルサイズを計算して正常に録音できているか検証する
+            Self::verify_recorded_file(ByteSize(file.metadata().await?.len()), recording_duration)?;
+
+            Ok(())
+        };
+
+        if let Err(e) = recording().await {
+            // 録音が失敗したのでファイルを削除
+            tokio::fs::remove_file(file_path).await?;
+            return Err(e);
         }
 
-        // 録音時間からファイルサイズを計算して正常に録音できているか検証する
-        // 結果はResultで返して呼び出し側に伝搬させる
-        Self::verify_recorded_file(ByteSize(file.metadata().await?.len()), recording_duration)
+        Ok(())
     }
 
     pub async fn download_timefree_program(
@@ -445,7 +458,6 @@ mod tests {
     use std::io::Write;
 
     use reqwest::Client;
-    use sanitise_file_name::sanitise;
     use tempfile::{NamedTempFile, TempDir};
 
     use crate::{telemetry::init_telemetry, test_helper::radiko_client};
@@ -453,13 +465,12 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "ファイル録音処理が実行されて数秒を要するため"]
+    #[ignore = "radiko apiに依存"]
     async fn output_smoke() -> anyhow::Result<()> {
         init_telemetry("output_smoke_test", Some("trace"));
         let radiko_client = radiko_client().await;
         let now_on_air_programs = radiko_client.now_on_air_programs(None).await?;
         let program = now_on_air_programs.first().unwrap();
-        let title = program.get_info();
         let media_list_url = radiko_client
             .media_list_url_for_live(&program.station_id)
             .await?;
@@ -469,7 +480,7 @@ mod tests {
             .start_recording(
                 media_list_url,
                 temp_dir.path().to_path_buf(),
-                &format!("{}.aac", sanitise(&title)),
+                &program.output_filename(),
                 Duration::from_secs(6),
             )
             .await
