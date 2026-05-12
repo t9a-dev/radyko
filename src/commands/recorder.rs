@@ -24,7 +24,7 @@ pub async fn run(args: RecorderArgs) -> anyhow::Result<()> {
     let app_state = Arc::new(AppState::build_from_recorder_args(args.clone()).await?);
     Utils::is_writable_output_dir(&app_state.output_dir().to_string_lossy());
 
-    // 録音ファイル出力ディレクトリ直下に録音予約管理ファイルを配置することでコンテナ環境でも追加の設定無しに永続化される
+    // 録音ファイル出力ディレクトリ直下に録音予約管理ファイルを配置することでコンテナ環境でも追加の設定無しに永続化できる
     let reserved_state_file_path = app_state.output_dir().join("reserved_programs");
     let recorder_state = Arc::new(RecorderState::new(
         Arc::clone(&app_state),
@@ -123,7 +123,8 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
             ByteSize::from_bytes(recorded_file.metadata()?.len()),
             Duration::from_secs(program.on_air_duration().0),
         )?;
-        recorder_state.remove_reserved_program(program.program_id())?
+        recorder_state.remove_reserved_program(program.program_id())?;
+        info!("sucess download timefree {}", program.get_info());
     }
 
     Ok(())
