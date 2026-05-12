@@ -3,14 +3,17 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::bail;
-use chrono::{DateTime, NaiveDateTime, TimeDelta, TimeZone, Utc};
-use chrono_tz::{Asia::Tokyo, Tz};
+use anyhow::{Context, bail};
+use jiff::{ToSpan, Zoned, civil::DateTime};
 use radiko::api::endpoint::Endpoint;
 use sanitise_file_name::sanitise;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::radiko::{self, jst_datetime};
+use crate::{
+    RADYKO_TZ_NAME,
+    app::utils::Utils,
+    radiko::{self, jst_datetime},
+};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Seconds(pub u64);
@@ -34,19 +37,17 @@ impl ProgramId {
                 };
                 Ok(ProgramId(
                     StationId(station_id.to_string()),
-                    StartAt(Self::format_datetime(start_at)),
-                    EndAt(Self::format_datetime(end_at)),
+                    StartAt(Self::format_datetime(start_at)?),
+                    EndAt(Self::format_datetime(end_at)?),
                 ))
             })
             .collect()
     }
 
-    fn format_datetime(s: &str) -> DateTime<Tz> {
-        Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str(s, Endpoint::DATETIME_FORMAT).unwrap(),
-            )
-            .unwrap()
+    fn format_datetime(s: &str) -> anyhow::Result<Zoned> {
+        DateTime::strptime(Endpoint::DATETIME_FORMAT, s)?
+            .in_tz(RADYKO_TZ_NAME)
+            .with_context(|| format!("format_datetime str: {s}"))
     }
 }
 
@@ -55,7 +56,7 @@ pub struct Programs {
     pub data: Vec<Program>,
 }
 impl Programs {
-    pub fn find_program(self, start_at: DateTime<Tz>) -> Option<Program> {
+    pub fn find_program(self, start_at: Zoned) -> Option<Program> {
         self.data.into_iter().find(|p| p.start_time.eq(&start_at))
     }
 }
@@ -68,27 +69,27 @@ impl Display for StationId {
     }
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct StartAt(pub DateTime<Tz>);
+pub struct StartAt(pub Zoned);
 
 impl Display for StartAt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.format(Endpoint::DATETIME_FORMAT))
+        write!(f, "{}", self.0.strftime(Endpoint::DATETIME_FORMAT))
     }
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct EndAt(pub DateTime<Tz>);
+pub struct EndAt(pub Zoned);
 impl Display for EndAt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.format(Endpoint::DATETIME_FORMAT))
+        write!(f, "{}", self.0.strftime(Endpoint::DATETIME_FORMAT))
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Program {
     #[serde(with = "jst_datetime")]
-    pub start_time: DateTime<Tz>,
+    pub start_time: Zoned,
     #[serde(with = "jst_datetime")]
-    pub end_time: DateTime<Tz>,
+    pub end_time: Zoned,
     pub station_id: String,
     pub title: String,
     pub performer: String,
@@ -102,12 +103,8 @@ pub struct Program {
 impl Default for Program {
     fn default() -> Self {
         Self {
-            start_time: Tokyo
-                .from_local_datetime(&DateTime::UNIX_EPOCH.naive_local())
-                .unwrap(),
-            end_time: Tokyo
-                .from_local_datetime(&DateTime::UNIX_EPOCH.naive_local())
-                .unwrap(),
+            start_time: Utils::now_in_tz_tokyo(),
+            end_time: Utils::now_in_tz_tokyo(),
             station_id: "TEST".to_string(),
             title: "テスト番組名".to_string(),
             performer: "テスト出演者".to_string(),
@@ -121,7 +118,7 @@ impl Default for Program {
 }
 
 impl Program {
-    pub fn new(start_time: DateTime<Tz>, end_time: DateTime<Tz>) -> Self {
+    pub fn new(start_time: Zoned, end_time: Zoned) -> Self {
         Self {
             start_time,
             end_time,
@@ -132,8 +129,8 @@ impl Program {
     pub fn program_id(&self) -> ProgramId {
         ProgramId(
             StationId(self.station_id.clone()),
-            StartAt(self.start_time),
-            EndAt(self.end_time),
+            StartAt(self.start_time.clone()),
+            EndAt(self.end_time.clone()),
         )
     }
 
@@ -152,18 +149,18 @@ impl Program {
         sanitise(&format!(
             "{}_{}_{}_{}.aac",
             self.station_id,
-            self.start_time.format("%Y%m%d_%H%M%S"),
+            self.start_time.strftime("%Y%m%d_%H%M%S"),
             self.title,
             self.performer,
         ))
     }
 
-    pub fn to_on_air_duration(&self, now: Option<DateTime<Tz>>) -> Seconds {
-        let now = now.unwrap_or(Utc::now().with_timezone(&Tokyo));
+    pub fn to_on_air_duration(&self, now: Option<Zoned>) -> Seconds {
+        let now = now.unwrap_or(Utils::now_in_tz_tokyo());
         Seconds(
             self.start_time
-                .signed_duration_since(now)
-                .num_seconds()
+                .duration_since(&now)
+                .as_secs()
                 .try_into()
                 .unwrap_or(0),
         )
@@ -172,8 +169,8 @@ impl Program {
     pub fn on_air_duration(&self) -> Seconds {
         Seconds(
             self.end_time
-                .signed_duration_since(self.start_time)
-                .num_seconds()
+                .duration_since(&self.start_time)
+                .as_secs()
                 .try_into()
                 .unwrap_or(0),
         )
@@ -189,18 +186,18 @@ impl Program {
         // buffer分を減算放送開始時間より前倒しの時間を計算
         let start_time = self
             .start_time
-            .checked_sub_signed(TimeDelta::seconds(start_buffer.try_into().unwrap_or(0)))
+            .checked_add(start_buffer.try_into().unwrap_or(0).seconds())
             .unwrap();
         // buffer分を加算して放送終了時間より後の時間を計算
         let end_time = self
             .end_time
-            .checked_add_signed(TimeDelta::seconds(end_buffer.try_into().unwrap_or(0)))
+            .checked_add(end_buffer.try_into().unwrap_or(0).seconds())
             .unwrap();
 
         Seconds(
             end_time
-                .signed_duration_since(start_time)
-                .num_seconds()
+                .duration_since(&start_time)
+                .as_secs()
                 .try_into()
                 .unwrap_or(0),
         )
@@ -209,48 +206,43 @@ impl Program {
 
 #[cfg(test)]
 mod tests {
+
+    use jiff::Unit;
+
+    use crate::test_helper::parse_datetime_in_tz_tokyo;
+
     use super::*;
-    use chrono::NaiveDateTime;
 
     #[test]
     fn on_air_duration_test() {
-        let on_air_duration = TimeDelta::hours(1);
-        let dummy_start_time = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("2000-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
-        let dummy_end_time = dummy_start_time
-            .checked_add_signed(on_air_duration)
-            .unwrap();
+        let on_air_duration = 1.hours();
+        let dummy_start_time = parse_datetime_in_tz_tokyo("2000-01-01 00:00:00");
+        let dummy_end_time = dummy_start_time.checked_add(on_air_duration).unwrap();
 
         let program = Program::new(dummy_start_time, dummy_end_time);
         assert_eq!(
-            on_air_duration.num_seconds() as u64,
+            on_air_duration.total(Unit::Second).unwrap() as u64,
             program.on_air_duration().0
         );
     }
 
     #[test]
     fn on_air_duration_with_buffer_test() {
-        let on_air_duration = TimeDelta::hours(1);
-        let dummy_start_time = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("2000-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
-        let dummy_end_time = dummy_start_time
-            .checked_add_signed(on_air_duration)
-            .unwrap();
+        let on_air_duration = 1.hours();
+        let dummy_start_time = parse_datetime_in_tz_tokyo("2000-01-01 00:00:00");
+        let dummy_end_time = dummy_start_time.checked_add(on_air_duration).unwrap();
 
-        let one_minutes_seconds = TimeDelta::minutes(1).num_seconds() as u64;
+        let start_buffer_seconds = 1.minutes().get_seconds() as u64;
+        let end_buffer_seconds = 1.minutes().get_seconds() as u64;
         let program = Program::new(dummy_start_time, dummy_end_time);
         assert_eq!(
-            on_air_duration.num_seconds() as u64 + one_minutes_seconds * 2,
+            on_air_duration.total(Unit::Second).unwrap() as u64
+                + start_buffer_seconds
+                + end_buffer_seconds,
             program
                 .on_air_duration_with_buffer(
-                    Seconds(one_minutes_seconds),
-                    Seconds(one_minutes_seconds)
+                    Seconds(start_buffer_seconds),
+                    Seconds(end_buffer_seconds)
                 )
                 .0
         );

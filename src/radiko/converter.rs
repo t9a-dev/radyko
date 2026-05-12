@@ -1,8 +1,7 @@
-use anyhow::Context;
-use chrono::{NaiveDateTime, TimeZone};
-use chrono_tz::Asia::Tokyo;
+use jiff::civil::DateTime;
 
 use crate::{
+    RADYKO_TZ_NAME,
     model::{
         logo::Logo,
         program::{Program, Programs},
@@ -111,21 +110,18 @@ impl From<RadikoProgramXml> for Programs {
     }
 }
 
+// TODO: 失敗する可能性があるのでTryFromトレイトに変更する
 impl From<ProgramXml> for Program {
     fn from(value: ProgramXml) -> Self {
-        let ft = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str(&value.ft, "%Y%m%d%H%M%S")
-                    .with_context(|| format!("parse error ft_value: {}", value.ft))
-                    .unwrap(),
-            )
+        const FORMAT: &str = "%Y%m%d%H%M%S";
+
+        let ft = DateTime::strptime(FORMAT, value.ft)
+            .unwrap()
+            .in_tz(RADYKO_TZ_NAME)
             .unwrap();
-        let to = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str(&value.to, "%Y%m%d%H%M%S")
-                    .with_context(|| format!("parse error to_value: {}", value.to))
-                    .unwrap(),
-            )
+        let to = DateTime::strptime(FORMAT, value.to)
+            .unwrap()
+            .in_tz(RADYKO_TZ_NAME)
             .unwrap();
         Program {
             start_time: ft,
@@ -154,10 +150,13 @@ impl From<LogoXml> for Logo {
 }
 
 pub mod jst_datetime {
+    
+    use jiff::{Zoned, civil::DateTime};
     /// https://serde.rs/custom-date-format.html
-    use chrono::{DateTime, NaiveDateTime, TimeZone};
-    use chrono_tz::{Asia::Tokyo, Tz};
     use serde::{self, Deserialize, Deserializer, Serializer};
+    use tracing::error;
+
+    use crate::RADYKO_TZ_NAME;
 
     const FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
@@ -168,11 +167,11 @@ pub mod jst_datetime {
     //        S: Serializer
     //
     // although it may also be generic over the input types T.
-    pub fn serialize<S>(date: &DateTime<Tz>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(date: &Zoned, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let s = format!("{}", date.format(FORMAT));
+        let s = format!("{}", date.strftime(FORMAT));
         serializer.serialize_str(&s)
     }
 
@@ -183,12 +182,15 @@ pub mod jst_datetime {
     //        D: Deserializer<'de>
     //
     // although it may also be generic over the output types T.
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Tz>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Zoned, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let dt = NaiveDateTime::parse_from_str(&s, FORMAT).unwrap();
-        Ok(Tokyo.from_local_datetime(&dt).unwrap())
+        Ok(DateTime::strptime(FORMAT, &s)
+            .unwrap()
+            .in_tz(RADYKO_TZ_NAME)
+            .map_err(|e| error!("jst_datetime deserialize error s: {s} error: {e:#?}"))
+            .unwrap())
     }
 }

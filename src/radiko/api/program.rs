@@ -3,8 +3,7 @@ use std::sync::Arc;
 use crate::model::{Program, program::Programs};
 use crate::radiko::xml::program::RadikoProgramXml;
 use anyhow::{Context, Result};
-use chrono::DateTime;
-use chrono_tz::Tz;
+use jiff::Zoned;
 
 use crate::radiko::api::endpoint::Endpoint;
 
@@ -57,11 +56,7 @@ impl RadikoProgram {
         Ok(Programs::from(radiko_program))
     }
 
-    pub async fn find_program(
-        &self,
-        station_id: &str,
-        start_at: DateTime<Tz>,
-    ) -> Result<Option<Program>> {
+    pub async fn find_program(&self, station_id: &str, start_at: Zoned) -> Result<Option<Program>> {
         let endpoint = Endpoint::weekly_programs_endpoint(station_id);
         let res = self
             .inner

@@ -43,7 +43,7 @@ pub async fn resolve_programs(
             Ok(result)
         })
         .await?;
-    programs.sort_by_key(|p| Reverse(p.start_time));
+    programs.sort_by_key(|p| Reverse(p.start_time.clone()));
 
     Ok(programs)
 }

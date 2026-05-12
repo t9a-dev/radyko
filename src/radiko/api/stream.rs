@@ -1,10 +1,9 @@
 use std::{borrow::Cow, convert::TryFrom, io::Write, sync::Arc};
 
 use anyhow::{Context, anyhow, bail};
-use chrono::{DateTime, TimeDelta};
-use chrono_tz::Tz;
 use futures::{Stream, StreamExt};
 use hls_m3u8::MasterPlaylist;
+use jiff::{ToSpan, Zoned};
 use tempfile::NamedTempFile;
 use tracing::error;
 
@@ -67,13 +66,15 @@ impl RadikoStream {
     pub fn stream_timefree_medialist_urls(
         &self,
         station_id: String,
-        start_at: DateTime<Tz>,
-        end_at: DateTime<Tz>,
+        start_at: Zoned,
+        end_at: Zoned,
     ) -> impl Stream<Item = anyhow::Result<String>> {
-        let seek_times = Self::calculate_seek_start_times(start_at, end_at);
+        let seek_times = Self::calculate_seek_start_times(start_at.clone(), end_at.clone());
         futures::stream::iter(seek_times).then(move |seek_time| {
             let this = self.clone();
             let station_id = station_id.clone();
+            let (start_at, end_at, seek_time) =
+                (start_at.clone(), end_at.clone(), seek_time.clone());
             async move {
                 // ここでセッション付きの音声配信エンドポイントURLが取得できるがセッションの有効期間が短い（具体的な期間までは未検証）
                 // 音声配信エンドポイントURLを一括で取得して後続の処理を行うと、セッション切れになってしまい配信エンドポイントURLが無効になる現象に遭遇した
@@ -107,9 +108,9 @@ impl RadikoStream {
     pub async fn get_medialist_url_for_timefree(
         &self,
         station_id: String,
-        start_at: DateTime<Tz>,
-        end_at: DateTime<Tz>,
-        seek: DateTime<Tz>,
+        start_at: Zoned,
+        end_at: Zoned,
+        seek: Zoned,
     ) -> anyhow::Result<String> {
         let master_playlist_res = self
             .inner
@@ -173,9 +174,9 @@ impl RadikoStream {
     fn timefree_stream_url(
         &self,
         station_id: String,
-        start_at: DateTime<Tz>,
-        end_at: DateTime<Tz>,
-        seek: DateTime<Tz>,
+        start_at: Zoned,
+        end_at: Zoned,
+        seek: Zoned,
     ) -> String {
         let lsid = &self.inner.radiko_auth.lsid().to_string();
         if self.inner.radiko_auth.area_free() {
@@ -197,10 +198,7 @@ impl RadikoStream {
         }
     }
 
-    fn calculate_seek_start_times(
-        mut start_at: DateTime<Tz>,
-        end_at: DateTime<Tz>,
-    ) -> Vec<DateTime<Tz>> {
+    fn calculate_seek_start_times(mut start_at: Zoned, end_at: Zoned) -> Vec<Zoned> {
         if end_at <= start_at {
             error!("end must be greater than start");
             return vec![];
@@ -208,8 +206,8 @@ impl RadikoStream {
 
         let mut times = vec![];
         while start_at < end_at {
-            times.push(start_at);
-            let Some(next_time) = start_at.checked_add_signed(TimeDelta::seconds(15)) else {
+            times.push(start_at.clone());
+            let Ok(next_time) = start_at.checked_add(15.seconds()) else {
                 break;
             };
             start_at = next_time;
@@ -226,15 +224,13 @@ mod tests {
         ops::Not,
     };
 
-    use chrono::{NaiveDateTime, TimeZone};
-    use chrono_tz::Asia::Tokyo;
-
     use crate::{
         constants::test_constants::TEST_STATION_ID,
         radiko::{
             api::{endpoint::Endpoint, stream::RadikoStream},
             test_helper::{AuthType, radiko_stream},
         },
+        test_helper::parse_datetime_in_tz_tokyo,
     };
 
     #[tokio::test]
@@ -303,40 +299,32 @@ mod tests {
 
     #[test]
     fn calculate_seek_start_times_test() {
-        let start = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("2000-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
-        let end = Tokyo
-            .from_local_datetime(
-                &NaiveDateTime::parse_from_str("2000-01-01 00:01:00", "%Y-%m-%d %H:%M:%S").unwrap(),
-            )
-            .unwrap();
+        let start = parse_datetime_in_tz_tokyo("2000-01-01 00:00:00");
+        let end = parse_datetime_in_tz_tokyo("2000-01-01 00:01:00");
         let mut seek_start_times = RadikoStream::calculate_seek_start_times(start, end);
         seek_start_times.sort();
 
         assert_eq!(
             seek_start_times[0]
-                .format(Endpoint::DATETIME_FORMAT)
+                .strftime(Endpoint::DATETIME_FORMAT)
                 .to_string(),
             "20000101000000"
         );
         assert_eq!(
             seek_start_times[1]
-                .format(Endpoint::DATETIME_FORMAT)
+                .strftime(Endpoint::DATETIME_FORMAT)
                 .to_string(),
             "20000101000015"
         );
         assert_eq!(
             seek_start_times[2]
-                .format(Endpoint::DATETIME_FORMAT)
+                .strftime(Endpoint::DATETIME_FORMAT)
                 .to_string(),
             "20000101000030"
         );
         assert_eq!(
             seek_start_times[3]
-                .format(Endpoint::DATETIME_FORMAT)
+                .strftime(Endpoint::DATETIME_FORMAT)
                 .to_string(),
             "20000101000045".to_string()
         );

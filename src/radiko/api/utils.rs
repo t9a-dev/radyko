@@ -1,4 +1,4 @@
-use chrono::Utc;
+use jiff::Zoned;
 use md5::{Digest, Md5};
 use rand::RngExt;
 
@@ -11,8 +11,8 @@ impl Utils {
         let random_num: u32 = rng.random_range(0..1000000000);
 
         // 現在時刻をミリ秒で取得
-        let now = Utc::now();
-        let timestamp = now.timestamp_millis();
+        let now = Zoned::now().in_tz("UTC").unwrap();
+        let timestamp = now.millisecond();
 
         // 文字列として連結
         let input_string = format!("{}{}", random_num, timestamp);

@@ -58,8 +58,8 @@ mod timefree_test {
 
         let stream_medialist_urls = radiko_client.stream_timefree_medialist_urls(
             dummy_program.station_id.to_string(),
-            dummy_program.start_time,
-            dummy_program.end_time,
+            dummy_program.start_time.clone(),
+            dummy_program.end_time.clone(),
         );
         pin_mut!(stream_medialist_urls);
 

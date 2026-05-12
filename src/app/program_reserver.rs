@@ -1,7 +1,6 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use chrono::DateTime;
-use chrono_tz::Tz;
+use jiff::Zoned;
 use tracing::{Instrument, error, trace};
 
 use crate::{
@@ -96,7 +95,7 @@ impl ReserveProgram {
         self.program.output_filename()
     }
 
-    fn to_on_air_duration_with_buffer(&self, now: Option<DateTime<Tz>>) -> Seconds {
+    fn to_on_air_duration_with_buffer(&self, now: Option<Zoned>) -> Seconds {
         Seconds(
             self.program
                 .to_on_air_duration(now)
