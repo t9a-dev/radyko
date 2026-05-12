@@ -106,17 +106,14 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
         .await?;
     let stream_handler = StreamHandler::new(reqwest::Client::new());
     for program in timefree_programs {
-        let media_list_urls = radiko_client
-            .clone()
-            .collect_timefree_medialist_urls(
-                program.station_id.clone(),
-                program.start_time,
-                program.end_time,
-            )
-            .await?;
+        let stream_media_list_urls = radiko_client.stream_timefree_medialist_urls(
+            program.station_id.clone(),
+            program.start_time,
+            program.end_time,
+        );
         let recorded_file_path = stream_handler
             .download_timefree_program(
-                media_list_urls,
+                stream_media_list_urls,
                 program.output_dir(recorder_state.app_state().output_dir()),
                 &program.output_filename(),
             )

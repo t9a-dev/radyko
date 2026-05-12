@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Days};
 use chrono_tz::Tz;
+use futures::Stream;
 use reqwest::Client;
 
 use crate::{
@@ -66,6 +67,19 @@ impl RadikoClient {
             .get_medialist_url_for_live(station_id)
             .await?
             .to_string())
+    }
+
+    pub async fn media_list_url_for_timefree(
+        &self,
+        station_id: String,
+        start_at: DateTime<Tz>,
+        end_at: DateTime<Tz>,
+        seek: DateTime<Tz>,
+    ) -> anyhow::Result<String> {
+        self.inner
+            .stream
+            .get_medialist_url_for_timefree(station_id, start_at, end_at, seek)
+            .await
     }
 
     pub async fn now_on_air_programs(&self, area_id: Option<&str>) -> anyhow::Result<Vec<Program>> {
@@ -136,16 +150,15 @@ impl RadikoClient {
         self.inner.program.find_program(station_id, start_at).await
     }
 
-    pub async fn collect_timefree_medialist_urls(
+    pub fn stream_timefree_medialist_urls(
         &self,
         station_id: String,
         start_at: DateTime<Tz>,
         end_at: DateTime<Tz>,
-    ) -> anyhow::Result<Vec<String>> {
+    ) -> impl Stream<Item = anyhow::Result<String>> {
         self.inner
             .stream
-            .collect_timefree_medialist_urls(station_id, start_at, end_at)
-            .await
+            .stream_timefree_medialist_urls(station_id, start_at, end_at)
     }
 
     async fn init(email_address: Option<&str>, password: Option<&str>) -> anyhow::Result<Self> {

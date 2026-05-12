@@ -47,7 +47,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use bytes::{Buf, Bytes};
-use futures::{StreamExt, TryStreamExt, stream};
+use futures::{Stream, StreamExt, pin_mut};
 use hls_m3u8::MediaPlaylist;
 use tokio::{
     io::AsyncWriteExt,
@@ -55,8 +55,6 @@ use tokio::{
     time::Instant,
 };
 use tracing::{Instrument, error, info, info_span, trace, warn};
-
-use crate::RADYKO_CONCURRENCY;
 
 #[derive(Debug)]
 pub struct ByteSize(u64);
@@ -147,30 +145,24 @@ impl StreamHandler {
 
     pub async fn download_timefree_program(
         &self,
-        media_list_urls: Vec<String>,
+        stream_media_list_urls: impl Stream<Item = anyhow::Result<String>>,
         output_dir: PathBuf,
         file_name: &str,
     ) -> anyhow::Result<PathBuf> {
-        // medialistのmediasequence_segmentsequenceとして並び替え可能な音声セグメントを取得する
-        // 全てダウンロードしたら並び替えて一ファイルに結合する
-        let mut audio_segments: Vec<AudioSegment> = stream::iter(media_list_urls)
-            .map(|media_list_url| {
-                let this = self.clone();
-                async move { this.collect_audio_segments(&media_list_url).await }
-            })
-            .buffer_unordered(RADYKO_CONCURRENCY)
-            .try_fold(Vec::new(), |mut audio_segments, segments| async move {
-                audio_segments.extend(segments);
-                Ok(audio_segments)
-            })
-            .await?;
+        pin_mut!(stream_media_list_urls);
+
+        let mut audio_segments = Vec::new();
+        while let Some(media_list_url) = stream_media_list_urls.next().await {
+            let segments = self.collect_audio_segments(&media_list_url?).await?;
+            audio_segments.extend(segments);
+        }
         audio_segments.sort_by_key(|a| a.sequence);
 
         tokio::fs::create_dir_all(output_dir.clone()).await?;
         let recording_file_path = Path::new(&output_dir).join(file_name);
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
-            .append(true)
+            .truncate(true)
             .write(true)
             .open(recording_file_path.clone())
             .await?;
@@ -275,7 +267,7 @@ impl StreamHandler {
         }
 
         bail!(
-            "recorded file verify failed. expected_lower_file_bytes: {expected_lower_file_bytes} actual_file_bytes: {actual_file_bytes}"
+            "recorded file verify failed. expected_lower_file_bytes: {expected_lower_file_bytes} actual_file_bytes: {actual_file_bytes} recording_duration: {recording_duration:#?}"
         )
     }
 
