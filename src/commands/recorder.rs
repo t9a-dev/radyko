@@ -123,7 +123,8 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
             ByteSize::from_bytes(recorded_file.metadata()?.len()),
             Duration::from_secs(program.on_air_duration().0),
         )?;
-        recorder_state.remove_reserved_program(program.program_id())?
+        recorder_state.remove_reserved_program(program.program_id())?;
+        info!("sucess download timefree {}", program.get_info());
     }
 
     Ok(())
