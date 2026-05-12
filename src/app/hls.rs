@@ -47,6 +47,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use bytes::{Buf, Bytes};
+use futures::{Stream, StreamExt, pin_mut};
 use hls_m3u8::MediaPlaylist;
 use tokio::{
     io::AsyncWriteExt,
@@ -54,6 +55,19 @@ use tokio::{
     time::Instant,
 };
 use tracing::{Instrument, error, info, info_span, trace, warn};
+
+#[derive(Debug)]
+pub struct ByteSize(u64);
+
+impl ByteSize {
+    pub fn from_bytes(bytes: u64) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(self) -> u64 {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct StreamHandler {
@@ -63,55 +77,217 @@ pub struct StreamHandler {
 #[derive(Debug)]
 struct StreamHandlerRef {
     client: reqwest::Client,
-    media_list_url: String,
+}
+
+#[derive(Debug)]
+struct AudioSegment {
+    sequence: usize,
+    audio_bytes: Bytes,
+}
+
+impl AudioSegment {
+    pub fn new(sequence: usize, audio_bytes: Bytes) -> Self {
+        Self {
+            sequence,
+            audio_bytes,
+        }
+    }
 }
 
 impl StreamHandler {
-    pub fn new(client: reqwest::Client, media_list_url: String) -> Self {
+    // 2時間(7200 secs)番組 = 44381250 bytes
+    // 1 secs = 6164.0625 bytes
+    const BYTES_PER_SECS: u64 = 6164;
+
+    pub fn new(client: reqwest::Client) -> Self {
         Self {
-            inner: Arc::new(StreamHandlerRef {
-                client,
-                media_list_url,
-            }),
+            inner: Arc::new(StreamHandlerRef { client }),
         }
     }
 
     pub async fn start_recording(
         &self,
+        media_list_url: String,
         output_dir: PathBuf,
         file_name: &str,
         recording_duration: Duration,
     ) -> anyhow::Result<()> {
-        let end_recording = Instant::now() + recording_duration;
+        let span = info_span!("handle_stream_start_recording", program = file_name);
         tokio::fs::create_dir_all(output_dir.clone()).await?;
+        let file_path = Path::new(&output_dir).join(file_name);
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .write(true)
-            .open(Path::new(&output_dir).join(file_name))
+            .open(file_path.clone())
             .await?;
 
-        let span = info_span!("handle_stream_start_recording", program = file_name);
-        let mut audio_segments_receiver = self.start_read().instrument(span).await?;
-        while let Some(audio_segment) = audio_segments_receiver.recv().await {
-            if end_recording <= Instant::now() {
-                info!("end recording: {}", file_name);
-                drop(audio_segment);
-                drop(audio_segments_receiver);
-                return Ok(());
-            }
+        let recording = async || -> anyhow::Result<()> {
+            let mut audio_segments_receiver =
+                self.start_read(media_list_url).instrument(span).await?;
+            let end_recording = Instant::now() + recording_duration;
 
-            let audio_segment = audio_segment?;
-            file.write_all(&audio_segment).await?;
-            file.flush().await?;
-            trace!("recive segment len: {}", audio_segment.len());
-            drop(audio_segment);
+            while let Some(audio_segment) = audio_segments_receiver.recv().await {
+                if end_recording <= Instant::now() {
+                    info!("end recording: {}", file_name);
+                    drop(audio_segment);
+                    drop(audio_segments_receiver);
+                    return Ok(());
+                }
+
+                let audio_segment = audio_segment?;
+                file.write_all(&audio_segment).await?;
+                file.flush().await?;
+                trace!("recive segment len: {}", audio_segment.len());
+                drop(audio_segment);
+            }
+            // 録音時間からファイルサイズを計算して正常に録音できているか検証する
+            Self::verify_recorded_file(ByteSize(file.metadata().await?.len()), recording_duration)?;
+
+            Ok(())
+        };
+
+        if let Err(e) = recording().await {
+            // 録音が失敗したのでファイルを削除
+            tokio::fs::remove_file(file_path).await?;
+            return Err(e);
         }
 
         Ok(())
     }
 
-    async fn start_read(&self) -> anyhow::Result<Receiver<anyhow::Result<Bytes>>> {
+    pub async fn download_timefree_program(
+        &self,
+        stream_media_list_urls: impl Stream<Item = anyhow::Result<String>>,
+        output_dir: PathBuf,
+        file_name: &str,
+    ) -> anyhow::Result<PathBuf> {
+        pin_mut!(stream_media_list_urls);
+
+        let mut audio_segments = Vec::new();
+        while let Some(media_list_url) = stream_media_list_urls.next().await {
+            let segments = self.collect_audio_segments(&media_list_url?).await?;
+            audio_segments.extend(segments);
+        }
+        audio_segments.sort_by_key(|a| a.sequence);
+
+        tokio::fs::create_dir_all(output_dir.clone()).await?;
+        let recording_file_path = Path::new(&output_dir).join(file_name);
+        let mut file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(recording_file_path.clone())
+            .await?;
+        for audio_segment in &audio_segments {
+            file.write_all(&audio_segment.audio_bytes).await?;
+        }
+        file.flush().await?;
+        drop(audio_segments);
+
+        Ok(recording_file_path)
+    }
+
+    async fn collect_audio_segments(
+        &self,
+        media_list_url: &str,
+    ) -> anyhow::Result<Vec<AudioSegment>> {
+        let media_playlist_response = self
+            .inner
+            .client
+            .get(media_list_url)
+            .send()
+            .await
+            .context("faild get playlist")?;
+        let media_playlist_content = media_playlist_response
+            .text()
+            .await
+            .context("faild get playlist text content")?;
+        let media_play_list = MediaPlaylist::builder()
+            .allowable_excess_duration(Duration::from_secs(5))
+            .parse(media_playlist_content.as_str())
+            .context("faild parse media playlist")?;
+
+        let media_sequence = media_play_list.media_sequence;
+        let segments = media_play_list.segments;
+
+        let mut audio_segments = Vec::new();
+        for (segment_sequence, segment) in segments {
+            let segment_url = segment.uri();
+            let processing_sequence = media_sequence + segment_sequence;
+
+            let segment_response = self
+                .inner
+                .client
+                .get(segment_url.to_string())
+                .send()
+                .await
+                .context("failed get segment")?;
+            let segment_bytes = segment_response
+                .bytes()
+                .await
+                .context("failed get segment from response")?;
+            // https://www.rfc-editor.org/rfc/rfc8216#section-3.4
+            let packed_audio_segment = segment_bytes;
+            let audio_bytes = Self::skip_id3_tag_bytes(packed_audio_segment)
+                .await
+                .context("failed skip id3 tag bytes")?;
+
+            audio_segments.push(AudioSegment::new(processing_sequence, audio_bytes));
+        }
+
+        Ok(audio_segments)
+    }
+
+    /// 録音ファイルサイズが下限サイズ(約5秒の欠落を許容)を満たしているかをチェックします
+    pub fn verify_recorded_file(
+        byte_size: ByteSize,
+        recording_duration: Duration,
+    ) -> anyhow::Result<()> {
+        // 全体的に冗長な感じもするがpanicしないことを優先
+        const TOLERANCE_SECS: u64 = 5;
+        if recording_duration.as_secs() <= TOLERANCE_SECS {
+            bail!(
+                "recording_duration must be greater than 5 seconds recording_duration: {}",
+                recording_duration.as_secs()
+            );
+        }
+
+        let expected_file_bytes = recording_duration
+            .as_secs()
+            .checked_mul(Self::BYTES_PER_SECS)
+            .with_context(|| {
+                format!(
+                    "failed calculate expected_file_bytes recording_duration: {recording_duration:#?}"
+                )
+            })?;
+        // 約5秒分のサイズ欠落を許容する
+        let tolerance_bytes = TOLERANCE_SECS
+            .checked_mul(Self::BYTES_PER_SECS)
+            .context("failed tolerance_bytes")?;
+        let expected_lower_file_bytes = expected_file_bytes
+            .checked_sub(tolerance_bytes)
+            .with_context(|| format!("failed calculate expected_bytes expected_file_bytes: {expected_file_bytes} tolerance_bytes: {tolerance_bytes}"))?;
+        // 下限が0 bytesということは空ファイル以外を全て許容してしまうのでエラーとする
+        if expected_lower_file_bytes == 0 {
+            bail!("expected_lower_file_bytes is 0");
+        }
+
+        let actual_file_bytes = byte_size.as_bytes();
+        // ファイルサイズから5秒程度の欠落であれば許容する
+        if expected_lower_file_bytes <= actual_file_bytes {
+            return Ok(());
+        }
+
+        bail!(
+            "recorded file verify failed. expected_lower_file_bytes: {expected_lower_file_bytes} actual_file_bytes: {actual_file_bytes} recording_duration: {recording_duration:#?}"
+        )
+    }
+
+    async fn start_read(
+        &self,
+        media_list_url: String,
+    ) -> anyhow::Result<Receiver<anyhow::Result<Bytes>>> {
         trace!("start read");
         // radikoのHLSで返されるセグメント数が常に3なので適当に2倍を見ておいてbufferを6にした
         let (tx, rx) = mpsc::channel::<anyhow::Result<Bytes>>(6);
@@ -121,7 +297,10 @@ impl StreamHandler {
             async move {
                 // エラーをチャネル経由で伝搬する
                 // handle_hls_stream自体は無限ループなので正常系で値を返さないのでエラーのみ処理
-                if let Err(e) = this.handle_hls_stream(tx.clone()).await {
+                if let Err(e) = this
+                    .handle_hls_stream(&media_list_url.clone(), tx.clone())
+                    .await
+                {
                     error!("handle hls stream error: {:#?}", e);
                     let _ = tx.send(Err(e)).await;
                 }
@@ -132,7 +311,11 @@ impl StreamHandler {
         Ok(rx)
     }
 
-    async fn handle_hls_stream(self, tx: Sender<anyhow::Result<Bytes>>) -> anyhow::Result<()> {
+    async fn handle_hls_stream(
+        self,
+        media_list_url: &str,
+        tx: Sender<anyhow::Result<Bytes>>,
+    ) -> anyhow::Result<()> {
         trace!("start handle hls stream");
         let mut last_processed_sequence = 0;
 
@@ -141,7 +324,7 @@ impl StreamHandler {
             let media_playlist_response = self
                 .inner
                 .client
-                .get(&self.inner.media_list_url)
+                .get(media_list_url)
                 .send()
                 .await
                 .context("faild get playlist")?;
@@ -272,29 +455,32 @@ impl StreamHandler {
 #[cfg(test)]
 mod tests {
 
+    use std::io::Write;
+
     use reqwest::Client;
-    use sanitise_file_name::sanitise;
-    use tempfile::TempDir;
+    use tempfile::{NamedTempFile, TempDir};
 
     use crate::{telemetry::init_telemetry, test_helper::radiko_client};
 
     use super::*;
 
     #[tokio::test]
-    #[ignore = "ファイル録音処理が実行されて数秒を要するため"]
+    #[ignore = "radiko apiに依存"]
     async fn output_smoke() -> anyhow::Result<()> {
         init_telemetry("output_smoke_test", Some("trace"));
         let radiko_client = radiko_client().await;
         let now_on_air_programs = radiko_client.now_on_air_programs(None).await?;
         let program = now_on_air_programs.first().unwrap();
-        let title = program.get_info();
-        let media_list_url = radiko_client.media_list_url(&program.station_id).await?;
+        let media_list_url = radiko_client
+            .media_list_url_for_live(&program.station_id)
+            .await?;
         let temp_dir = TempDir::new_in(".")?;
-        let stream_handler = Arc::new(StreamHandler::new(Client::new(), media_list_url));
+        let stream_handler = Arc::new(StreamHandler::new(Client::new()));
         if let Err(e) = stream_handler
             .start_recording(
+                media_list_url,
                 temp_dir.path().to_path_buf(),
-                &format!("{}.aac", sanitise(&title)),
+                &program.output_filename(),
                 Duration::from_secs(6),
             )
             .await
@@ -302,6 +488,40 @@ mod tests {
             error!("hls::StreamHandler test error: {:#?}", e);
         };
 
+        Ok(())
+    }
+
+    #[test]
+    fn verify_recorded_file_bytes_when_success_recording_test() -> anyhow::Result<()> {
+        // 2時間番組の録音が成功
+        let valid_bytes: usize = (StreamHandler::BYTES_PER_SECS * 7200) as usize;
+        let buf = vec![0u8; valid_bytes];
+        let mut file = NamedTempFile::new_in(".")?;
+        file.write_all(&buf)?;
+        let metadata = file.as_file().metadata()?;
+
+        let result = StreamHandler::verify_recorded_file(
+            ByteSize(metadata.len()),
+            Duration::from_secs(7200),
+        );
+        assert!(result.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn verify_recorded_file_bytes_when_failed_recording_test() -> anyhow::Result<()> {
+        // 2時間番組の録音が失敗していて1時間しか録音できていない
+        let invalid_bytes: usize = (StreamHandler::BYTES_PER_SECS * 3600) as usize;
+        let buf = vec![0u8; invalid_bytes];
+        let mut file = NamedTempFile::new_in(".")?;
+        file.write_all(&buf)?;
+        let metadata = file.as_file().metadata()?;
+
+        let result = StreamHandler::verify_recorded_file(
+            ByteSize(metadata.len()),
+            Duration::from_secs(7200),
+        );
+        assert!(result.is_err());
         Ok(())
     }
 }

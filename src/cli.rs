@@ -72,10 +72,7 @@ pub async fn run() -> anyhow::Result<()> {
     send_otel_connectivity_check();
 
     match cli.command {
-        Some(Commands::Recorder(args)) => {
-            let _ = recorder::run(args).await;
-            Ok(())
-        }
+        Some(Commands::Recorder(args)) => recorder::run(args).await,
         Some(Commands::Rule(args)) => rule::run(args).await,
         Some(Commands::Search(args)) => search::run(args).await,
         Some(Commands::Init) => {

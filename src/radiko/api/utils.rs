@@ -1,6 +1,6 @@
 use chrono::Utc;
 use md5::{Digest, Md5};
-use rand::prelude::*;
+use rand::RngExt;
 
 pub struct Utils {}
 impl Utils {

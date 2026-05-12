@@ -2,13 +2,13 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use chrono::DateTime;
 use chrono_tz::Tz;
-use sanitise_file_name::sanitise;
 use tracing::{Instrument, error, trace};
 
 use crate::{
     app::{
         config::{RecordingConfig, RecordingDurationBufferConfig},
         recording::{self},
+        types::RecordingEvent,
     },
     model::program::{Program, Seconds},
     radiko::RadikoClient,
@@ -35,8 +35,8 @@ impl RecordingDurationBuffer {
 impl Default for RecordingDurationBuffer {
     fn default() -> Self {
         Self {
-            start: Seconds(60),
-            end: Seconds(60),
+            start: Seconds(0),
+            end: Seconds(0),
         }
     }
 }
@@ -75,15 +75,6 @@ impl ReserveProgram {
         tokio::time::sleep(Duration::from_secs(wait_for_on_air_secs)).await;
     }
 
-    pub fn to_on_air_duration_with_buffer(&self, now: Option<DateTime<Tz>>) -> Seconds {
-        Seconds(
-            self.program
-                .to_on_air_duration(now)
-                .0
-                .saturating_sub(self.start_buffer.0),
-        )
-    }
-
     pub fn on_air_duration(&self) -> Seconds {
         self.program
             .on_air_duration_with_buffer(self.start_buffer, self.end_buffer)
@@ -98,17 +89,20 @@ impl ReserveProgram {
     }
 
     pub fn output_dir(&self) -> PathBuf {
-        self.output_root_dir.join(sanitise(&self.program.title))
+        self.program.output_dir(self.output_root_dir.clone())
     }
 
     pub fn output_filename(&self) -> String {
-        sanitise(&format!(
-            "{}_{}_{}_{}.aac",
-            self.program.station_id,
-            self.program.start_time.format("%Y%m%d_%H%M%S"),
-            self.program.title,
-            self.program.performer,
-        ))
+        self.program.output_filename()
+    }
+
+    fn to_on_air_duration_with_buffer(&self, now: Option<DateTime<Tz>>) -> Seconds {
+        Seconds(
+            self.program
+                .to_on_air_duration(now)
+                .0
+                .saturating_sub(self.start_buffer.0),
+        )
     }
 }
 
@@ -133,8 +127,12 @@ impl ProgramReserver {
         }
     }
 
-    #[tracing::instrument(name = "recorder_reserve" skip(self,program))]
-    pub async fn reserve(&self, program: Program) -> anyhow::Result<()> {
+    #[tracing::instrument(name = "recorder_reserve" skip(self,program,tx))]
+    pub async fn reserve(
+        &self,
+        program: Program,
+        tx: tokio::sync::mpsc::Sender<RecordingEvent>,
+    ) -> anyhow::Result<()> {
         let program = Arc::new(ReserveProgram::new(
             program,
             self.inner.config.output_dir.clone(),
@@ -146,18 +144,29 @@ impl ProgramReserver {
         tokio::spawn(
             async move {
                 program.wait_for_on_air().await;
-                let refreshed_radiko_client = this
-                    .inner
-                    .radiko_client
-                    .refresh_auth()
-                    .await
-                    .map_err(|e| error!("refresh radiko client error: {:#?}", e))
-                    .unwrap();
+                let refreshed_radiko_client = match this.inner.radiko_client.refresh_auth().await {
+                    Ok(refreshed_client) => refreshed_client,
+                    Err(e) => {
+                        error!("failed refresh radiko client: {:#?}", e);
+                        // トークンのリフレッシュに失敗したら、そのまま現状のクライアントを使う
+                        this.inner.radiko_client.clone()
+                    }
+                };
                 if let Err(e) = tokio::fs::create_dir_all(program.output_dir()).await {
                     error!("create recording dir error: {:#?}", e)
                 };
-                if let Err(e) = recording::start(refreshed_radiko_client, program).await {
-                    error!("recording error: {:#?}", e);
+                match recording::start_for_live(refreshed_radiko_client, program.clone()).await {
+                    Ok(_) => {
+                        let _ = tx
+                            .send(RecordingEvent::Done(program.program.program_id()))
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = tx
+                            .send(RecordingEvent::Fail(program.program.program_id()))
+                            .await;
+                        error!("recording error: {:#?}", e);
+                    }
                 };
             }
             .in_current_span(),

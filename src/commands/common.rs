@@ -1,12 +1,13 @@
 use crate::{
+    RADYKO_CONCURRENCY,
     app::{
         config::RadykoConfig, program_resolver::resolve_selector,
         program_selector::ProgramSelector, state::AppState,
     },
     model::Program,
 };
+use futures::{StreamExt, TryStreamExt};
 use std::{cmp::Reverse, sync::Arc};
-use tokio_stream::StreamExt;
 use tracing::{info, warn};
 
 pub fn collect_program_selectors(config: &RadykoConfig) -> anyhow::Result<Vec<ProgramSelector>> {
@@ -31,24 +32,18 @@ pub async fn resolve_programs(
     app_state: Arc<AppState>,
     program_selectors: Vec<ProgramSelector>,
 ) -> anyhow::Result<Vec<Program>> {
-    let mut resolve_program_handles = tokio_stream::iter(
-        program_selectors
-            .into_iter()
-            .map(|selector| {
-                let app_state = Arc::clone(&app_state);
-                tokio::spawn(async move {
-                    resolve_selector(&app_state.radiko_client, selector)
-                        .await
-                        .unwrap()
-                })
-            })
-            .collect::<Vec<_>>(),
-    );
-    let mut programs = Vec::new();
-    // https://github.com/tokio-rs/tokio/issues/2401
-    while let Some(resolved_programs) = resolve_program_handles.next().await {
-        programs.extend(resolved_programs.await.unwrap());
-    }
+    let mut programs = futures::stream::iter(program_selectors)
+        .map(|selector| {
+            let app_state = Arc::clone(&app_state);
+            async move { resolve_selector(&app_state.radiko_client, selector).await }
+        })
+        .buffer_unordered(RADYKO_CONCURRENCY)
+        .try_fold(Vec::new(), |mut result, programs| async move {
+            result.extend(programs);
+            Ok(result)
+        })
+        .await?;
     programs.sort_by_key(|p| Reverse(p.start_time));
+
     Ok(programs)
 }

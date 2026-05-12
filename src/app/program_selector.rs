@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anyhow::bail;
 use chrono::{DateTime, Days, Utc};
 use chrono_tz::{Asia::Tokyo, Tz};
 use cron::Schedule;
@@ -80,7 +81,13 @@ impl ProgramSelector {
     ) -> anyhow::Result<Vec<DateTime<Tz>>> {
         let schedule = Schedule::from_str(&cron).map_err(|_| ScheduleError::InvalidCron(cron))?;
         let target_datetime = now.unwrap_or(Utc::now().with_timezone(&Tokyo));
-        let days_after = target_datetime.checked_add_days(days).unwrap();
+        let Some(days_after) = target_datetime.checked_add_days(days) else {
+            bail!(
+                "failed calculate target_datetime after days. target_datetime: {:#?}, days: {:#?} ",
+                target_datetime,
+                days
+            );
+        };
 
         Ok(schedule
             .after(&target_datetime)

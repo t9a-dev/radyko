@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 pub(super) mod auth;
-pub(super) mod endpoint;
+pub mod endpoint;
 pub(super) mod program;
 pub(super) mod search;
 pub(super) mod station;

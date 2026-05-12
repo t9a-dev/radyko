@@ -1,4 +1,4 @@
-mod api;
+pub mod api;
 mod client;
 mod converter;
 pub(crate) mod xml;
@@ -37,14 +37,14 @@ mod test_helper {
     static RADIKO_PROGRAM: std::sync::OnceLock<RadikoProgram> = std::sync::OnceLock::new();
 
     pub fn reqwest_client() -> &'static reqwest::Client {
-        CLIENT.get_or_init(|| Client::new())
+        CLIENT.get_or_init(Client::new)
     }
 
     pub async fn radiko_auth(auth_type: AuthType) -> &'static RadikoAuth {
         match auth_type {
             AuthType::Normal => {
                 RADIKO_AUTH
-                    .get_or_init(|| async { RadikoAuth::new().await })
+                    .get_or_init(|| async { RadikoAuth::new().await.unwrap() })
                     .await
             }
             AuthType::AreaFree => {
@@ -58,6 +58,7 @@ mod test_helper {
                             credential.password.expose_secret(),
                         )
                         .await
+                        .unwrap()
                     })
                     .await
             }
@@ -71,7 +72,7 @@ mod test_helper {
     }
 
     pub fn radiko_station() -> &'static RadikoStation {
-        RADIKO_STATION.get_or_init(|| RadikoStation::new())
+        RADIKO_STATION.get_or_init(RadikoStation::new)
     }
 
     pub fn radiko_search() -> &'static RadikoSearch {
