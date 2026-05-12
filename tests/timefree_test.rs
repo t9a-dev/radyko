@@ -65,7 +65,7 @@ mod timefree_test {
 
         let stream_handler = StreamHandler::new(reqwest::Client::new());
         let output_dir_path = PathBuf::from_str("./timefree_test")?;
-        let _ = std::fs::create_dir_all(&output_dir_path)?;
+        std::fs::create_dir_all(&output_dir_path)?;
         let download_program = ReserveProgram::new(dummy_program.clone(), output_dir_path, None);
         let downloaded_file_path = stream_handler
             .download_timefree_program(

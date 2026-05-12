@@ -280,11 +280,11 @@ mod tests {
         program.station_id = "LFR".to_string();
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&vec![program])?;
+        recorder_state.append_reserved_program(&[program])?;
 
         // 録音予約を全て取得
         let all_reserved_program_ids = recorder_state.get_reserved_program_ids()?;
-        assert_eq!(all_reserved_program_ids.iter().count(), 1);
+        assert_eq!(all_reserved_program_ids.len(), 1);
         assert_eq!(
             all_reserved_program_ids.first().unwrap().0,
             StationId("LFR".to_string())
@@ -306,7 +306,7 @@ mod tests {
             )
             .unwrap();
         let program_ids = recorder_state.collect_aired_program_ids(Some(now))?;
-        assert_eq!(program_ids.iter().count(), 1);
+        assert_eq!(program_ids.len(), 1);
         assert_eq!(program_ids.first().unwrap().0, StationId("LFR".to_string()));
 
         Ok(())
@@ -330,13 +330,13 @@ mod tests {
         program.station_id = "LFR".to_string();
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&vec![program.clone()])?;
+        recorder_state.append_reserved_program(&[program.clone()])?;
         let mut content = String::new();
         reserved_programs_file.read_to_string(&mut content)?;
         assert_eq!(ProgramId::parse_from_string(content)?.len(), 1);
 
         // 重複した予約情報は登録されない(LFR)
-        recorder_state.append_reserved_program(&vec![program.clone()])?;
+        recorder_state.append_reserved_program(&[program.clone()])?;
         let mut content = String::new();
         reserved_programs_file
             .reopen()?

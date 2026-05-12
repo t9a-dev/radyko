@@ -30,14 +30,14 @@ pub mod test_helper {
     static AREA_FREE_RADIKO_CLIENT: sync::OnceCell<RadikoClient> = OnceCell::const_new();
 
     pub fn reqwest_client() -> &'static reqwest::Client {
-        CLIENT.get_or_init(|| Client::new())
+        CLIENT.get_or_init(Client::new)
     }
 
     pub fn load_example_config() -> anyhow::Result<RadykoConfig> {
         let cursor = Cursor::new(config::EXAMPLE_CONFIG);
         let reader = BufReader::new(cursor);
 
-        Ok(RadykoConfig::parse(reader)?)
+        RadykoConfig::parse(reader)
     }
 
     pub async fn radiko_client() -> &'static RadikoClient {
