@@ -127,7 +127,7 @@ impl ProgramReserver {
         }
     }
 
-    #[tracing::instrument(name = "recorder_reserve" skip(self,program))]
+    #[tracing::instrument(name = "recorder_reserve" skip(self,program,tx))]
     pub async fn reserve(
         &self,
         program: Program,
