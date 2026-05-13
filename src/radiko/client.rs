@@ -30,18 +30,15 @@ struct RadikoClientRef {
 }
 
 impl RadikoClient {
-    pub async fn new_area_free(
-        email_address: &str,
-        password: &str,
-    ) -> anyhow::Result<RadikoClient> {
+    pub async fn new_area_free(email_address: &str, password: &str) -> anyhow::Result<Self> {
         Self::init(Some(email_address), Some(password)).await
     }
 
-    pub async fn new() -> anyhow::Result<RadikoClient> {
+    pub async fn new() -> anyhow::Result<Self> {
         Self::init(None, None).await
     }
 
-    pub async fn refresh_auth(&self) -> anyhow::Result<RadikoClient> {
+    pub async fn refresh_auth(&self) -> anyhow::Result<Self> {
         let refreshed_auth = self.inner.auth.refresh_auth().await?;
         let inner = Self::build_inner(refreshed_auth);
 
