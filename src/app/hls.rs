@@ -132,7 +132,7 @@ impl StreamHandler {
                     info!("end recording: {}", file_name);
                     drop(audio_segment);
                     drop(audio_segments_receiver);
-                    return Ok(());
+                    break;
                 }
 
                 let audio_segment = audio_segment?;
