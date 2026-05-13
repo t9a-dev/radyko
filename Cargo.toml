@@ -17,7 +17,7 @@ log = "0.4.29"
 mimalloc = { version = "0.1.48", features = ["v3"] }
 opentelemetry = "0.31.0"
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
-opentelemetry_sdk = "0.31.0"
+opentelemetry_sdk = "0.32.0"
 quick-xml = { version = "0.39.4", features = ["serialize"] }
 rand = "0.10.1"
 regex = "1.12.3"
