@@ -1106,9 +1106,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-cron"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e64b72f9789fcc08e9f13f8bd9e27a29ff2d58aaf004bd266fae6b85bf8025dc"
+checksum = "fa4804a5e6441082f7b8f2e840c639e489902aba5533c1e95c2fb7f0ab23d96c"
 dependencies = [
  "jiff",
  "phf",

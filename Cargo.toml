@@ -39,7 +39,7 @@ tracing-opentelemetry = "0.32.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "local-time"] }
 futures = "0.3.32"
 jiff = "0.2.24"
-jiff-cron = "0.2.0"
+jiff-cron = "0.3.0"
 
 [dev-dependencies]
 insta = { version = "1.47.2", features = ["yaml"] }
