@@ -43,6 +43,10 @@ pub struct ProgramXml {
     #[serde(rename = "@dur")]
     pub dur: Option<u32>,
 
+    #[serde(skip_serializing, skip_deserializing)]
+    /// TryFrom実装でProgram.station_idに設定するのに利用
+    pub station_id: String,
+
     pub title: String,
     pub url: Option<String>,
     pub desc: Option<String>,

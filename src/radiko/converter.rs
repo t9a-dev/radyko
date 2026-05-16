@@ -108,10 +108,9 @@ impl TryFrom<RadikoProgramXml> for Programs {
                     continue;
                 };
 
-                for program_xml in programs_xml {
-                    let mut program = Program::try_from(program_xml)?;
-                    program.station_id = station.id.clone();
-                    programs.push(program);
+                for mut program_xml in programs_xml {
+                    program_xml.station_id = station.id.clone();
+                    programs.push(Program::try_from(program_xml)?);
                 }
             }
         }
@@ -124,7 +123,6 @@ impl TryFrom<ProgramXml> for Program {
 
     fn try_from(value: ProgramXml) -> Result<Self, Self::Error> {
         const FORMAT: &str = "%Y%m%d%H%M%S";
-
         let ft = DateTime::strptime(FORMAT, &value.ft)
             .map_err(|e| {
                 ConvertError::Invalid(format!("failed parse ft: {}, error: {e:#?}", value.ft))
@@ -145,10 +143,11 @@ impl TryFrom<ProgramXml> for Program {
                     "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
                 ))
             })?;
+
         Ok(Program {
             start_time: ft,
             end_time: to,
-            station_id: "".to_string(),
+            station_id: value.station_id,
             title: value.title.clone(),
             performer: value.pfm.unwrap_or_default(),
         })
