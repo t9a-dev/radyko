@@ -1,4 +1,5 @@
 use jiff::civil::DateTime;
+use thiserror::Error;
 
 use crate::{
     RADYKO_TZ_NAME,
@@ -15,6 +16,12 @@ use crate::{
         station::{StationXml, StationsXml},
     },
 };
+
+#[derive(Debug, Error)]
+pub enum ConvertError {
+    #[error("{}",.0)]
+    Invalid(String),
+}
 
 impl From<RegionXml> for Region {
     fn from(value: RegionXml) -> Self {
@@ -90,8 +97,10 @@ impl From<StationsXml> for Stations {
     }
 }
 
-impl From<RadikoProgramXml> for Programs {
-    fn from(value: RadikoProgramXml) -> Self {
+impl TryFrom<RadikoProgramXml> for Programs {
+    type Error = ConvertError;
+
+    fn try_from(value: RadikoProgramXml) -> Result<Self, Self::Error> {
         let mut programs = Vec::new();
         for station in value.stations.station {
             for programs_xml in station.programs {
@@ -100,41 +109,49 @@ impl From<RadikoProgramXml> for Programs {
                 };
 
                 for program_xml in programs_xml {
-                    let mut program = Program::from(program_xml);
+                    let mut program = Program::try_from(program_xml)?;
                     program.station_id = station.id.clone();
                     programs.push(program);
                 }
             }
         }
-        Programs { data: programs }
+        Ok(Programs { data: programs })
     }
 }
 
-// TODO: 失敗する可能性があるのでTryFromトレイトに変更する
-impl From<ProgramXml> for Program {
-    fn from(value: ProgramXml) -> Self {
+impl TryFrom<ProgramXml> for Program {
+    type Error = ConvertError;
+
+    fn try_from(value: ProgramXml) -> Result<Self, Self::Error> {
         const FORMAT: &str = "%Y%m%d%H%M%S";
 
-        let ft = DateTime::strptime(FORMAT, value.ft)
-            .unwrap()
+        let ft = DateTime::strptime(FORMAT, &value.ft)
+            .map_err(|e| {
+                ConvertError::Invalid(format!("failed parse ft: {}, error: {e:#?}", value.ft))
+            })?
             .in_tz(RADYKO_TZ_NAME)
-            .unwrap();
-        let to = DateTime::strptime(FORMAT, value.to)
-            .unwrap()
+            .map_err(|e| {
+                ConvertError::Invalid(format!(
+                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
+                ))
+            })?;
+        let to = DateTime::strptime(FORMAT, &value.to)
+            .map_err(|e| {
+                ConvertError::Invalid(format!("failed parse to: {}, error: {e:#?}", value.to))
+            })?
             .in_tz(RADYKO_TZ_NAME)
-            .unwrap();
-        Program {
+            .map_err(|e| {
+                ConvertError::Invalid(format!(
+                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
+                ))
+            })?;
+        Ok(Program {
             start_time: ft,
             end_time: to,
             station_id: "".to_string(),
             title: value.title.clone(),
             performer: value.pfm.unwrap_or_default(),
-            // start_time_s: value.ftl.clone(),
-            // end_time_s: value.tol.clone(),
-            // info: value.info.unwrap_or_default(),
-            // description: value.desc.unwrap_or_default(),
-            // img: value.img.unwrap_or_default(),
-        }
+        })
     }
 }
 
@@ -150,7 +167,7 @@ impl From<LogoXml> for Logo {
 }
 
 pub mod jst_datetime {
-    
+
     use jiff::{Zoned, civil::DateTime};
     /// https://serde.rs/custom-date-format.html
     use serde::{self, Deserialize, Deserializer, Serializer};
