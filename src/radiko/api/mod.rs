@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-pub(super) mod auth;
+pub(crate) mod auth;
 pub mod endpoint;
 pub(super) mod program;
 pub(super) mod search;

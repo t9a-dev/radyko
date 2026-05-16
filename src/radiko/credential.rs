@@ -1,15 +1,18 @@
+use std::{env, path::PathBuf};
+
 use secrecy::SecretString;
-use std::env;
 use tracing::{info, warn};
+
+#[derive(Debug, Clone)]
 pub struct RadikoCredential {
-    pub email_address: SecretString,
-    pub password: SecretString,
+    email_address: SecretString,
+    password: SecretString,
 }
 
 impl RadikoCredential {
-    pub fn load_credential() -> Option<RadikoCredential> {
-        let dotenv_path = ".env";
-        let _ = dotenvy::from_path(dotenv_path);
+    pub fn load_from_env_file() -> Option<RadikoCredential> {
+        let env_file_path = PathBuf::from(".env");
+        let _ = dotenvy::from_path(&env_file_path);
         let mail = env::var("RADIKO_AREA_FREE_MAIL");
         let password = env::var("RADIKO_AREA_FREE_PASSWORD");
         match (mail, password) {
@@ -21,9 +24,19 @@ impl RadikoCredential {
                 })
             }
             _ => {
-                warn!("failed load radiko credential from environment");
+                warn!(
+                    "failed load radiko credential from environment env_file_path: {env_file_path:#?}"
+                );
                 None
             }
         }
+    }
+
+    pub fn email_address(&self) -> SecretString {
+        self.email_address.clone()
+    }
+
+    pub fn password(&self) -> SecretString {
+        self.password.clone()
     }
 }

@@ -28,7 +28,7 @@ pub mod tests_common {
 
     pub async fn radiko_client() -> &'static RadikoClient {
         RADIKO_CLIENT
-            .get_or_init(|| async { RadikoClient::new().await.unwrap() })
+            .get_or_init(|| async { RadikoClient::new(None).await.unwrap() })
             .await
     }
 

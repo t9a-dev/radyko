@@ -9,11 +9,11 @@ use reqwest::{
     cookie::{self, Jar},
     header::HeaderMap,
 };
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::radiko::api::endpoint::Endpoint;
+use crate::radiko::{api::endpoint::Endpoint, credential::RadikoCredential};
 
 #[derive(Debug, Clone)]
 pub struct RadikoAuthedClient(reqwest::Client);
@@ -30,8 +30,7 @@ struct RadikoAuthRef {
     http_client: RadikoAuthedClient,
     auth_token: String,
     stream_lsid: String,
-    email_address: Option<SecretString>,
-    password: Option<SecretString>,
+    credential: Option<RadikoCredential>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,16 +47,8 @@ struct LoginResponse {
 }
 
 impl RadikoAuth {
-    pub async fn new() -> anyhow::Result<Self> {
-        Self::init(None, None).await
-    }
-
-    pub async fn new_area_free(email_address: &str, password: &str) -> anyhow::Result<Self> {
-        Self::init(
-            Some(SecretString::new(email_address.into())),
-            Some(SecretString::new(password.into())),
-        )
-        .await
+    pub async fn new(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
+        Self::init(credential).await
     }
 
     pub fn area_id(&self) -> Cow<'_, str> {
@@ -81,14 +72,10 @@ impl RadikoAuth {
     }
 
     pub async fn refresh_auth(&self) -> Result<Self> {
-        Self::init(
-            self.inner.email_address.clone(),
-            self.inner.password.clone(),
-        )
-        .await
+        Self::init(self.inner.credential.clone()).await
     }
 
-    async fn init(mail: Option<SecretString>, pass: Option<SecretString>) -> Result<Self> {
+    async fn init(credential: Option<RadikoCredential>) -> Result<Self> {
         let auth1_url = Endpoint::auth1_endpoint();
         let auth2_url = Endpoint::auth2_endpoint();
         let auth_key = Self::get_public_auth_key().await?;
@@ -108,13 +95,10 @@ impl RadikoAuth {
         let default_area_id = area_id_caps[0].to_string();
 
         // login
-        let (is_area_free, cookie) = match (mail.clone(), pass.clone()) {
-            (Some(mail), Some(pass)) => (
-                true,
-                RadikoAuth::login(mail.clone().expose_secret(), pass.clone().expose_secret())
-                    .await?,
-            ),
-            _ => (false, Arc::new(Jar::default())),
+        let is_area_free = &credential.is_some();
+        let cookie = match &credential {
+            Some(credential) => RadikoAuth::login(credential).await?,
+            _ => Arc::new(Jar::default()),
         };
         let logined_client = Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -184,12 +168,11 @@ impl RadikoAuth {
         Ok(Self {
             inner: Arc::new(RadikoAuthRef {
                 area_id: default_area_id.to_string(),
-                area_free: is_area_free,
+                area_free: *is_area_free,
                 http_client: RadikoAuthedClient(authed_client),
                 auth_token: auth_token.to_string(),
                 stream_lsid: lsid,
-                email_address: mail,
-                password: pass,
+                credential,
             }),
         })
     }
@@ -208,10 +191,14 @@ impl RadikoAuth {
         Ok(auth_key_caps["auth_key"].to_string())
     }
 
-    async fn login(mail: &str, pass: &str) -> Result<Arc<cookie::Jar>> {
+    async fn login(credential: &RadikoCredential) -> Result<Arc<cookie::Jar>> {
         let mut login_info = HashMap::new();
-        login_info.insert("mail", mail);
-        login_info.insert("pass", pass);
+        login_info.insert(
+            "mail",
+            credential.email_address().expose_secret().to_string(),
+        );
+        login_info.insert("pass", credential.password().expose_secret().to_string());
+
         let login_res: LoginResponse = Client::new()
             .post(Endpoint::login_endpoint())
             .form(&login_info)

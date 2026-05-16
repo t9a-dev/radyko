@@ -1,5 +1,4 @@
 pub mod config;
-pub mod credential;
 pub mod hls;
 pub mod program_reserver;
 pub mod program_resolver;

@@ -6,7 +6,7 @@ use crate::{cli::SearchArgs, radiko::RadikoClient};
 
 #[tracing::instrument(name = "cli_command_search")]
 pub async fn run(args: SearchArgs) -> anyhow::Result<()> {
-    let radiko_client = RadikoClient::new().await?;
+    let radiko_client = RadikoClient::new(None).await?;
     let programs = radiko_client
         .search_programs(args.keyword, args.station_id.as_deref())
         .await?

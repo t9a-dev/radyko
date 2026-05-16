@@ -7,14 +7,12 @@ use std::{
 };
 
 use jiff::Zoned;
-use secrecy::ExposeSecret;
 use tempfile::TempDir;
 use tracing::error;
 
 use crate::{
     app::{
         config::{RadykoConfig, RecordingConfig},
-        credential::RadikoCredential,
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
@@ -22,7 +20,7 @@ use crate::{
         Program,
         program::{EndAt, ProgramId},
     },
-    radiko::RadikoClient,
+    radiko::{RadikoClient, credential::RadikoCredential},
 };
 
 #[derive(Debug)]
@@ -41,33 +39,15 @@ impl AppState {
 
     pub async fn build_from_recorder_args(args: RecorderArgs) -> anyhow::Result<Self> {
         let radyko_config = RadykoConfig::parse_from_path(args.config.config_path)?;
-        let radiko_credential = RadikoCredential::load_credential();
-        let radiko_client = match radiko_credential {
-            Some(c) => {
-                RadikoClient::new_area_free(
-                    c.email_address.expose_secret(),
-                    c.password.expose_secret(),
-                )
-                .await?
-            }
-            None => RadikoClient::new().await?,
-        };
+        let radiko_credential = RadikoCredential::load_from_env_file();
+        let radiko_client = RadikoClient::new(radiko_credential).await?;
         Self::new(radyko_config, radiko_client).await
     }
 
     pub async fn build_from_rule_args(args: RuleArgs) -> anyhow::Result<Self> {
         let radyko_config = RadykoConfig::parse_from_path(args.config.config_path)?;
-        let radiko_credential = RadikoCredential::load_credential();
-        let radiko_client = match radiko_credential {
-            Some(c) => {
-                RadikoClient::new_area_free(
-                    c.email_address.expose_secret(),
-                    c.password.expose_secret(),
-                )
-                .await?
-            }
-            None => RadikoClient::new().await?,
-        };
+        let radiko_credential = RadikoCredential::load_from_env_file();
+        let radiko_client = RadikoClient::new(radiko_credential).await?;
         Self::new(radyko_config, radiko_client).await
     }
 
@@ -193,6 +173,7 @@ impl RecorderState {
         self.app_state.schedule_update_interval_secs()
     }
 
+    // TODO: ファイル読み書きしているところはRepositoryに抽象化した方が良さそう
     fn get_reserved_program_ids(&self) -> anyhow::Result<Vec<ProgramId>> {
         ProgramId::parse_from_string(fs::read_to_string(
             self.inner.reserved_state_file_path.clone(),

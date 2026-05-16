@@ -7,11 +7,14 @@ use reqwest::Client;
 use crate::{
     app::utils::Utils,
     model::program::{Program, Programs},
-    radiko::api::{
-        auth::RadikoAuth,
-        program::RadikoProgram,
-        search::{Filter, RadikoSearch, RadikoSearchCondition},
-        stream::RadikoStream,
+    radiko::{
+        api::{
+            auth::RadikoAuth,
+            program::RadikoProgram,
+            search::{Filter, RadikoSearch, RadikoSearchCondition},
+            stream::RadikoStream,
+        },
+        credential::RadikoCredential,
     },
 };
 
@@ -29,13 +32,10 @@ struct RadikoClientRef {
     search: RadikoSearch,
 }
 
+// TODO: 対応するインターフェースを作る オブジェクト設計スタイルガイド6章.5あたり
 impl RadikoClient {
-    pub async fn new_area_free(email_address: &str, password: &str) -> anyhow::Result<Self> {
-        Self::init(Some(email_address), Some(password)).await
-    }
-
-    pub async fn new() -> anyhow::Result<Self> {
-        Self::init(None, None).await
+    pub async fn new(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
+        Self::init(credential).await
     }
 
     pub async fn refresh_auth(&self) -> anyhow::Result<Self> {
@@ -155,8 +155,8 @@ impl RadikoClient {
             .stream_timefree_medialist_urls(station_id, start_at, end_at)
     }
 
-    async fn init(email_address: Option<&str>, password: Option<&str>) -> anyhow::Result<Self> {
-        let inner = Self::init_inner(email_address, password).await?;
+    async fn init(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
+        let inner = Self::init_inner(credential).await?;
 
         Ok(Self {
             default_area_id: Arc::new(inner.auth.area_id().to_string()),
@@ -164,14 +164,8 @@ impl RadikoClient {
         })
     }
 
-    async fn init_inner(
-        email_address: Option<&str>,
-        password: Option<&str>,
-    ) -> anyhow::Result<RadikoClientRef> {
-        let radiko_auth = match (email_address, password) {
-            (Some(email), Some(pass)) => RadikoAuth::new_area_free(email, pass).await,
-            _ => RadikoAuth::new().await,
-        };
+    async fn init_inner(credential: Option<RadikoCredential>) -> anyhow::Result<RadikoClientRef> {
+        let radiko_auth = RadikoAuth::new(credential).await;
 
         Ok(Self::build_inner(radiko_auth?))
     }

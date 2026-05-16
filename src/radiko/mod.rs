@@ -1,6 +1,7 @@
 pub mod api;
 mod client;
 mod converter;
+pub mod credential;
 pub(crate) mod xml;
 pub use converter::jst_datetime;
 
@@ -8,16 +9,14 @@ pub use client::RadikoClient;
 
 #[cfg(test)]
 mod test_helper {
-    use anyhow::Context;
     use reqwest::Client;
-    use secrecy::ExposeSecret;
 
-    use crate::{
-        app::credential::RadikoCredential,
-        radiko::api::{
+    use crate::radiko::{
+        api::{
             auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
             stream::RadikoStream,
         },
+        credential::RadikoCredential,
     };
 
     pub enum AuthType {
@@ -44,21 +43,14 @@ mod test_helper {
         match auth_type {
             AuthType::Normal => {
                 RADIKO_AUTH
-                    .get_or_init(|| async { RadikoAuth::new().await.unwrap() })
+                    .get_or_init(|| async { RadikoAuth::new(None).await.unwrap() })
                     .await
             }
             AuthType::AreaFree => {
                 RADIKO_AUTH_AREA_FREE
                     .get_or_init(|| async {
-                        let credential = RadikoCredential::load_credential()
-                            .context("エリアフリー会員情報の読み込みに失敗")
-                            .unwrap();
-                        RadikoAuth::new_area_free(
-                            credential.email_address.expose_secret(),
-                            credential.password.expose_secret(),
-                        )
-                        .await
-                        .unwrap()
+                        let credential = RadikoCredential::load_from_env_file();
+                        RadikoAuth::new(credential).await.unwrap()
                     })
                     .await
             }
