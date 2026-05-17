@@ -7,14 +7,11 @@ use reqwest::Client;
 use crate::{
     app::utils::Utils,
     model::program::{Program, Programs},
-    radiko::{
-        api::{
-            auth::RadikoAuth,
-            program::RadikoProgram,
-            search::{Filter, RadikoSearch, RadikoSearchCondition},
-            stream::RadikoStream,
-        },
-        credential::RadikoCredential,
+    radiko::api::{
+        auth::{RadikoAuth, RadikoCredential},
+        program::RadikoProgram,
+        search::{Filter, RadikoSearch, RadikoSearchCondition},
+        stream::RadikoStream,
     },
 };
 

@@ -20,7 +20,7 @@ use crate::{
         Program,
         program::{EndAt, ProgramId},
     },
-    radiko::{RadikoClient, credential::RadikoCredential},
+    radiko::{RadikoClient, api::auth::RadikoCredential},
 };
 
 #[derive(Debug)]

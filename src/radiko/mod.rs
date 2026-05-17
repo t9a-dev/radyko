@@ -1,7 +1,6 @@
 pub mod api;
 mod client;
 mod converter;
-pub mod credential;
 pub(crate) mod xml;
 pub use converter::jst_datetime;
 
@@ -11,12 +10,12 @@ pub use client::RadikoClient;
 mod test_helper {
     use reqwest::Client;
 
-    use crate::radiko::{
-        api::{
-            auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
-            stream::RadikoStream,
-        },
-        credential::RadikoCredential,
+    use crate::radiko::api::{
+        auth::{RadikoAuth, RadikoCredential},
+        program::RadikoProgram,
+        search::RadikoSearch,
+        station::RadikoStation,
+        stream::RadikoStream,
     };
 
     pub enum AuthType {

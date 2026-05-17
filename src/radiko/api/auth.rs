@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, env, path::PathBuf, str::FromStr, sync::Arc};
 
 use anyhow::{Result, anyhow};
 
@@ -9,12 +9,41 @@ use reqwest::{
     cookie::{self, Jar},
     header::HeaderMap,
 };
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 
-use crate::radiko::{api::endpoint::Endpoint, credential::RadikoCredential};
+use crate::radiko::api::endpoint::Endpoint;
 
+#[derive(Debug, Clone)]
+pub struct RadikoCredential {
+    email_address: SecretString,
+    password: SecretString,
+}
+
+impl RadikoCredential {
+    pub fn load_from_env_file() -> Option<RadikoCredential> {
+        let env_file_path = PathBuf::from(".env");
+        let _ = dotenvy::from_path(&env_file_path);
+        let mail = env::var("RADIKO_AREA_FREE_MAIL");
+        let password = env::var("RADIKO_AREA_FREE_PASSWORD");
+        match (mail, password) {
+            (Ok(mail), Ok(password)) => {
+                info!("success load radiko credential from environment");
+                Some(RadikoCredential {
+                    email_address: SecretString::new(mail.into()),
+                    password: SecretString::new(password.into()),
+                })
+            }
+            _ => {
+                warn!(
+                    "failed load radiko credential from environment env_file_path: {env_file_path:#?}"
+                );
+                None
+            }
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub struct RadikoAuthedClient(reqwest::Client);
 
@@ -193,11 +222,8 @@ impl RadikoAuth {
 
     async fn login(credential: &RadikoCredential) -> Result<Arc<cookie::Jar>> {
         let mut login_info = HashMap::new();
-        login_info.insert(
-            "mail",
-            credential.email_address().expose_secret().to_string(),
-        );
-        login_info.insert("pass", credential.password().expose_secret().to_string());
+        login_info.insert("mail", credential.email_address.expose_secret());
+        login_info.insert("pass", credential.password.expose_secret());
 
         let login_res: LoginResponse = Client::new()
             .post(Endpoint::login_endpoint())
