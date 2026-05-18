@@ -7,6 +7,8 @@ use jiff::{ToSpan, Zoned};
 use tempfile::NamedTempFile;
 use tracing::error;
 
+use crate::RADYKO_CONCURRENCY;
+
 use super::{auth::RadikoAuth, endpoint::Endpoint};
 
 #[derive(Debug, Clone)]
@@ -62,7 +64,7 @@ impl RadikoStream {
             .into())
     }
 
-    /// medialist urlからタイムフリー音声配信URLを非同期に順次取得する
+    /// medialist urlからタイムフリー音声配信URLを非同期に取得する
     pub fn stream_timefree_medialist_urls(
         &self,
         station_id: String,
@@ -70,18 +72,20 @@ impl RadikoStream {
         end_at: Zoned,
     ) -> impl Stream<Item = anyhow::Result<String>> {
         let seek_times = Self::calculate_seek_start_times(start_at.clone(), end_at.clone());
-        futures::stream::iter(seek_times).then(move |seek_time| {
-            let this = self.clone();
-            let station_id = station_id.clone();
-            let (start_at, end_at, seek_time) =
-                (start_at.clone(), end_at.clone(), seek_time.clone());
-            async move {
-                // ここでセッション付きの音声配信エンドポイントURLが取得できるがセッションの有効期間が短い（具体的な期間までは未検証）
-                // 音声配信エンドポイントURLを一括で取得して後続の処理を行うと、セッション切れになってしまい配信エンドポイントURLが無効になる現象に遭遇した
-                this.get_medialist_url_for_timefree(station_id, start_at, end_at, seek_time)
-                    .await
-            }
-        })
+        futures::stream::iter(seek_times)
+            .map(move |seek_time| {
+                let this = self.clone();
+                let station_id = station_id.clone();
+                let (start_at, end_at, seek_time) =
+                    (start_at.clone(), end_at.clone(), seek_time.clone());
+                async move {
+                    // ここでセッション付きの音声配信エンドポイントURLが取得できるがセッションの有効期間が短い（具体的な期間までは未検証）
+                    // 音声配信エンドポイントURLを一括で取得して後続の処理を行うと、処理の途中でセッション切れになってしまい配信エンドポイントURLが無効になる現象に遭遇した
+                    this.get_medialist_url_for_timefree(station_id, start_at, end_at, seek_time)
+                        .await
+                }
+            })
+            .buffer_unordered(RADYKO_CONCURRENCY)
     }
 
     pub async fn download_playlist_to_tempfile(

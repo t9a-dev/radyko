@@ -7,7 +7,7 @@ pub mod radiko;
 pub mod telemetry;
 
 pub const RADYKO_TZ_NAME: &str = "Asia/Tokyo";
-/// 非同期処理を並行処理する際の同時数
+/// 並行処理の同時実行数指定に利用
 pub const RADYKO_CONCURRENCY: usize = 2;
 #[cfg(test)]
 pub mod test_helper {
