@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::model::{Program, program::Programs};
-use crate::radiko::xml::program::RadikoProgramXml;
+use crate::radiko::dto::program_xml::RadikoProgramXml;
 use anyhow::Context;
 use jiff::Zoned;
 

@@ -1,7 +1,7 @@
 pub mod api;
 mod client;
 mod converter;
-pub(crate) mod xml;
+pub(crate) mod dto;
 pub use converter::jst_datetime;
 
 pub use client::RadikoClient;

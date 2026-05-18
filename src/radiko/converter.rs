@@ -9,11 +9,11 @@ use crate::{
         region::{Region, RegionStation, RegionStations},
         station::{Station, Stations},
     },
-    radiko::xml::{
-        logo::LogoXml,
-        program::{ProgramXml, RadikoProgramXml},
-        region::{RegionStationXml, RegionStationsXml, RegionXml},
-        station::{StationXml, StationsXml},
+    radiko::dto::{
+        logo_xml::LogoXml,
+        program_xml::{ProgramXml, RadikoProgramXml},
+        region_xml::{RegionStationXml, RegionStationsXml, RegionXml},
+        station_xml::{StationXml, StationsXml},
     },
 };
 

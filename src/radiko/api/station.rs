@@ -10,7 +10,7 @@ use crate::{
     },
     radiko::{
         api::endpoint::Endpoint,
-        xml::{region::RegionXml, station::StationsXml},
+        dto::{region_xml::RegionXml, station_xml::StationsXml},
     },
 };
 

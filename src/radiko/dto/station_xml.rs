@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::logo::LogoXml;
+use super::logo_xml::LogoXml;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename = "stations")]
