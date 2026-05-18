@@ -3,8 +3,7 @@ use serde_with::skip_serializing_none;
 use strum_macros::{AsRefStr, Display};
 use thiserror::Error;
 
-use crate::model::program::Programs;
-use crate::radiko::api::endpoint::Endpoint;
+use crate::{model::program::programs::Programs, radiko::api::endpoint::Endpoint};
 use anyhow::Result;
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -22,6 +21,7 @@ impl RadikoSearch {
     pub fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
+
     pub async fn find_program(&self, condition: &RadikoSearchCondition) -> Result<Programs> {
         if condition.key.is_empty() {
             return Err(SearchConditionError::RequireKeyword.into());

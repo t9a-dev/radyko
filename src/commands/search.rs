@@ -19,7 +19,7 @@ pub async fn run(args: SearchArgs) -> anyhow::Result<()> {
     let mut writer = BufWriter::new(stdio.lock());
     if let Err(e) = programs
         .into_iter()
-        .try_for_each(|program| writeln!(writer, "{}", program.get_info()))
+        .try_for_each(|program| writeln!(writer, "{}", program.info()))
     {
         error!("failed wirte program info to stdout: {:#?}", e);
     };

@@ -6,7 +6,7 @@ use reqwest::Client;
 
 use crate::{
     app::utils::Utils,
-    model::program::{Program, Programs},
+    model::program::{program::Program, programs::Programs},
     radiko::api::{
         auth::{RadikoAuth, RadikoCredential},
         program::RadikoProgram,
@@ -181,7 +181,10 @@ impl RadikoClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::{radiko::api::endpoint::Endpoint, test_helper::radiko_client};
+    use crate::{
+        model::program::program_id::{ProgramId, StartAt, StationId},
+        test_helper::radiko_client,
+    };
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
@@ -195,25 +198,16 @@ mod tests {
             )
             .await?;
         let first_program = timefree_programs.data.first().unwrap();
-        println!(
-            "first_program_start_time: {}",
-            first_program
-                .start_time
-                .clone()
-                .strftime(Endpoint::DATETIME_FORMAT)
-        );
+        let ProgramId(StationId(station_id), StartAt(start_time), _) = first_program.program_id();
         // 適当に選んだ番組情報から同じ番組情報を見つけられれば良い
         let program = radiko_client
-            .find_program(first_program.start_time.clone(), &first_program.station_id)
+            .find_program(start_time.clone(), &station_id)
             .await?;
 
         assert!(program.is_some());
         let program = program.unwrap();
 
-        assert_eq!(first_program.station_id, program.station_id);
-        assert_eq!(first_program.title, program.title);
-        assert_eq!(first_program.start_time, program.start_time);
-        assert_eq!(first_program.end_time, program.end_time);
+        assert!(first_program.eq(&program));
 
         Ok(())
     }

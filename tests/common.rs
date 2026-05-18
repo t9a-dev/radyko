@@ -7,7 +7,9 @@ pub mod tests_common {
 
     use jiff::Zoned;
     use radyko::app::config;
-    use radyko::model::Program;
+    use radyko::model::program::program::Program;
+    use radyko::model::program::program_id::ProgramId;
+    use radyko::model::program::program_id::StationId;
     use radyko::{app::config::RadykoConfig, radiko::RadikoClient};
     use tokio::sync::OnceCell;
 
@@ -39,11 +41,8 @@ pub mod tests_common {
     impl TestProgram for Program {
         /// テスト用に放送時間を差し替えたProgramを返す
         fn with_start_end_time(&self, start: Zoned, end: Zoned) -> Self {
-            Self {
-                start_time: start,
-                end_time: end,
-                ..self.clone()
-            }
+            let ProgramId(StationId(station_id), _, _) = self.program_id();
+            Self::new(station_id, start, end)
         }
     }
 }

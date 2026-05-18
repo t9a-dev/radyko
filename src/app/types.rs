@@ -1,4 +1,7 @@
-use crate::model::program::ProgramId;
+use crate::model::program::program_id::ProgramId;
+
+#[derive(Debug, Copy, Clone)]
+pub struct Seconds(pub u64);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Keyword(pub String);

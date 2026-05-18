@@ -8,7 +8,8 @@ use tracing::error;
 use crate::{
     app::{state::AppState, utils::Utils},
     cli::RuleArgs,
-    commands::common::{collect_program_selectors, resolve_programs},
+    commands::common::collect_program_selectors,
+    model::program::programs::Programs,
 };
 
 #[tracing::instrument(name = "cli_command_rule")]
@@ -22,7 +23,7 @@ pub async fn run(args: RuleArgs) -> anyhow::Result<()> {
             .read()
             .expect("app_state config RwLock poisoned"),
     )?;
-    let programs = resolve_programs(app_state, program_selectors).await?;
+    let programs = Programs::resolve_selectors(&app_state.radiko_client, program_selectors).await?;
 
     // println!(): programsをforで回しながらprintln!()するとprintln!()のたびにstdioをロックする。
     // writeln!(): 一度stdioをロックして、出力内容をbufferに書き溜めて最後に一度表示する方法が効率が良い。
@@ -31,7 +32,7 @@ pub async fn run(args: RuleArgs) -> anyhow::Result<()> {
     let mut writer = BufWriter::new(stdio.lock());
     if let Err(e) = programs
         .into_iter()
-        .try_for_each(|program| writeln!(writer, "{}", program.get_info()))
+        .try_for_each(|program| writeln!(writer, "{}", program.info()))
     {
         error!("failed wirte program info to stdout: {:#?}", e);
     };

@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
-use crate::model::{Program, program::Programs};
-use crate::radiko::dto::program_xml::RadikoProgramXml;
 use anyhow::Context;
 use jiff::Zoned;
 
-use crate::radiko::api::endpoint::Endpoint;
+use crate::{
+    model::program::{program::Program, programs::Programs},
+    radiko::{api::endpoint::Endpoint, dto::program_xml::RadikoProgramXml},
+};
 
 #[derive(Debug, Clone)]
 pub struct RadikoProgram {

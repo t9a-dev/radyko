@@ -2,7 +2,6 @@ pub mod audio_segments;
 pub mod config;
 pub mod hls;
 pub mod program_reserver;
-pub mod program_resolver;
 pub mod program_selector;
 pub mod recording;
 pub mod search_programs;

@@ -1,6 +1,6 @@
 use crate::{
     app::types::{Keyword, Station},
-    model::program::Programs,
+    model::program::programs::Programs,
     radiko::RadikoClient,
 };
 

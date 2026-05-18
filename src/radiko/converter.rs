@@ -1,27 +1,15 @@
-use jiff::civil::DateTime;
-use thiserror::Error;
-
 use crate::{
-    RADYKO_TZ_NAME,
     model::{
         logo::Logo,
-        program::{Program, Programs},
         region::{Region, RegionStation, RegionStations},
         station::{Station, Stations},
     },
     radiko::dto::{
         logo_xml::LogoXml,
-        program_xml::{ProgramXml, RadikoProgramXml},
         region_xml::{RegionStationXml, RegionStationsXml, RegionXml},
         station_xml::{StationXml, StationsXml},
     },
 };
-
-#[derive(Debug, Error)]
-pub enum ConvertError {
-    #[error("{}",.0)]
-    Invalid(String),
-}
 
 impl From<RegionXml> for Region {
     fn from(value: RegionXml) -> Self {
@@ -94,63 +82,6 @@ impl From<StationsXml> for Stations {
             area_name: value.area_name,
             data: value.stations.into_iter().map(Station::from).collect(),
         }
-    }
-}
-
-impl TryFrom<RadikoProgramXml> for Programs {
-    type Error = ConvertError;
-
-    fn try_from(value: RadikoProgramXml) -> Result<Self, Self::Error> {
-        let mut programs = Vec::new();
-        for station in value.stations.station {
-            for programs_xml in station.programs {
-                let Some(programs_xml) = programs_xml.program else {
-                    continue;
-                };
-
-                for mut program_xml in programs_xml {
-                    program_xml.station_id = station.id.clone();
-                    programs.push(Program::try_from(program_xml)?);
-                }
-            }
-        }
-        Ok(Programs { data: programs })
-    }
-}
-
-impl TryFrom<ProgramXml> for Program {
-    type Error = ConvertError;
-
-    fn try_from(value: ProgramXml) -> Result<Self, Self::Error> {
-        const FORMAT: &str = "%Y%m%d%H%M%S";
-        let ft = DateTime::strptime(FORMAT, &value.ft)
-            .map_err(|e| {
-                ConvertError::Invalid(format!("failed parse ft: {}, error: {e:#?}", value.ft))
-            })?
-            .in_tz(RADYKO_TZ_NAME)
-            .map_err(|e| {
-                ConvertError::Invalid(format!(
-                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
-                ))
-            })?;
-        let to = DateTime::strptime(FORMAT, &value.to)
-            .map_err(|e| {
-                ConvertError::Invalid(format!("failed parse to: {}, error: {e:#?}", value.to))
-            })?
-            .in_tz(RADYKO_TZ_NAME)
-            .map_err(|e| {
-                ConvertError::Invalid(format!(
-                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
-                ))
-            })?;
-
-        Ok(Program {
-            start_time: ft,
-            end_time: to,
-            station_id: value.station_id,
-            title: value.title.clone(),
-            performer: value.pfm.unwrap_or_default(),
-        })
     }
 }
 

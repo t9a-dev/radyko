@@ -4,11 +4,16 @@ use anyhow::bail;
 use jiff::{Span, ToSpan, Zoned};
 use jiff_cron::Schedule;
 use thiserror::Error;
+use tracing::warn;
 
-use crate::app::{
-    config::{RadykoConfigKeywords, RadykoConfigRules},
-    types::Station,
-    utils::Utils,
+use crate::{
+    app::{
+        config::{RadykoConfigKeywords, RadykoConfigRules},
+        types::Station,
+        utils::Utils,
+    },
+    model::program::{program::Program, programs::Programs},
+    radiko::RadikoClient,
 };
 
 #[derive(Debug, Error, PartialEq)]
@@ -25,8 +30,8 @@ pub enum Selector {
 }
 
 pub struct ProgramSelector {
-    pub station: Station,
-    pub selector: Selector,
+    station: Station,
+    selector: Selector,
 }
 
 impl ProgramSelector {
@@ -49,6 +54,34 @@ impl ProgramSelector {
             .into_iter()
             .map(|(station_id, keywords)| Self::new_keywords(station_id, keywords))
             .collect()
+    }
+
+    pub async fn resolve_selector(
+        self,
+        radiko_client: &RadikoClient,
+    ) -> anyhow::Result<Vec<Program>> {
+        match self.station {
+            Station::Nationwide => match self.selector {
+                Selector::Keywords(keywords) => {
+                    Ok(Programs::resolve_keywords(radiko_client, keywords, self.station).await?)
+                }
+                Selector::StartTimes(_) => {
+                    warn!("指定した時間から始まる全ての放送を録音するようなユースケースには非対応");
+                    Ok(vec![])
+                }
+            },
+            Station::Id(ref station_id) => match self.selector {
+                Selector::StartTimes(start_times) => {
+                    Ok(
+                        Programs::resolve_start_times(radiko_client, start_times, station_id)
+                            .await?,
+                    )
+                }
+                Selector::Keywords(keywords) => {
+                    Ok(Programs::resolve_keywords(radiko_client, keywords, self.station).await?)
+                }
+            },
+        }
     }
 
     fn new_rules(station_id: Station, cron: String, now: Option<Zoned>) -> anyhow::Result<Self> {

@@ -11,6 +11,7 @@ mod recording_program_test {
             config::{RecordingConfig, RecordingDurationBufferConfig},
             program_reserver::ProgramReserver,
         },
+        model::program::duration_buffer::RecordingDurationBuffer,
         telemetry::init_telemetry,
     };
     use tempfile::TempDir;
@@ -34,7 +35,7 @@ mod recording_program_test {
         };
         let program_reserver = Arc::new(ProgramReserver::new(
             radiko_client.clone(),
-            recording_config,
+            recording_config.output_dir,
         ));
         let now = Zoned::now().in_tz("UTC")?;
         let recording_duration_secs = 5;
@@ -44,7 +45,13 @@ mod recording_program_test {
             now.checked_add(recording_duration_secs.seconds())?,
         );
         let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        program_reserver.reserve(test_reserve_program, tx).await?;
+        program_reserver
+            .reserve(
+                test_reserve_program,
+                RecordingDurationBuffer::from_config(None),
+                tx,
+            )
+            .await?;
 
         // バックグラウンドで録音処理が実行される時間待機
         // 録音処理でエラーが発生しないことのみを検証

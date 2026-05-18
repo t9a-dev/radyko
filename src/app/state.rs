@@ -16,9 +16,9 @@ use crate::{
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
-    model::{
-        Program,
-        program::{EndAt, ProgramId},
+    model::program::{
+        program::Program,
+        program_id::{EndAt, ProgramId},
     },
     radiko::{RadikoClient, api::auth::RadikoCredential},
 };
@@ -196,7 +196,7 @@ impl RecorderState {
                 .open(self.inner.reserved_state_file_path.as_path())?,
         );
         for program in reserve_programs {
-            writeln!(file, "{} # {}", program.program_id(), program.get_info())?;
+            writeln!(file, "{} # {}", program.program_id(), program.info())?;
         }
         file.flush()?;
 
@@ -225,9 +225,9 @@ mod tests {
     use crate::{
         RADYKO_TZ_NAME,
         app::state::{AppState, RecorderState},
-        model::{
-            Program,
-            program::{ProgramId, StationId},
+        model::program::{
+            program::Program,
+            program_id::{ProgramId, StationId},
         },
         test_helper::{load_example_config, radiko_client},
     };
@@ -253,8 +253,7 @@ mod tests {
         let start_at =
             DateTime::strptime(DATETIME_FORMAT, "2000-01-01 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
         let end_at = start_at.checked_add(on_air_duration).unwrap();
-        let mut program = Program::new(start_at, end_at);
-        program.station_id = "LFR".to_string();
+        let program = Program::new("LFR".to_string(), start_at, end_at);
 
         // 録音予約を永続化(LFR)
         recorder_state.append_reserved_program(&[program])?;
@@ -294,8 +293,7 @@ mod tests {
         let start_at =
             DateTime::strptime(DATETIME_FORMAT, "2000-01-01 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
         let end_at = start_at.checked_add(on_air_duration).unwrap();
-        let mut program = Program::new(start_at, end_at);
-        program.station_id = "LFR".to_string();
+        let program = Program::new("LFR".to_string(), start_at.clone(), end_at.clone());
 
         // 録音予約を永続化(LFR)
         recorder_state.append_reserved_program(&[program.clone()])?;
@@ -313,7 +311,7 @@ mod tests {
 
         // 別の放送局(TBS)情報を指定して予約情報を削除
         // 録音予約(LFR)が残っている
-        program.station_id = "TBS".to_string();
+        let program = Program::new("TBS".to_string(), start_at.clone(), end_at.clone());
         recorder_state.remove_reserved_program(program.program_id())?;
         let mut content = String::new();
         reserved_programs_file
@@ -325,7 +323,7 @@ mod tests {
         );
 
         // 録音が完了したので予約情報を削除
-        program.station_id = "LFR".to_string();
+        let program = Program::new("LFR".to_string(), start_at.clone(), end_at.clone());
         recorder_state.remove_reserved_program(program.program_id())?;
         let mut content = String::new();
         reserved_programs_file

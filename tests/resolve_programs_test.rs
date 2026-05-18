@@ -5,7 +5,7 @@ mod resolve_programs_test {
     use std::ops::Not;
 
     use crate::common::tests_common::{load_example_config, radiko_client};
-    use radyko::app::{program_resolver::resolve_selector, program_selector::ProgramSelector};
+    use radyko::{app::program_selector::ProgramSelector, model::program::programs::Programs};
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
@@ -20,13 +20,8 @@ mod resolve_programs_test {
                 vec!["オールナイトニッポン".to_string()],
             );
         }
-
-        let mut result = Vec::new();
         let program_selectors = ProgramSelector::from_keywords(radyko_config.keywords.unwrap());
-        for program_selector in program_selectors {
-            let programs = resolve_selector(radiko_client, program_selector).await?;
-            result.extend(programs);
-        }
+        let result = Programs::resolve_selectors(radiko_client, program_selectors).await?;
 
         assert!(result.is_empty().not());
         println!("resolve keyword programs: {:#?}", result);
@@ -39,13 +34,8 @@ mod resolve_programs_test {
     async fn resolve_rule_programs() -> anyhow::Result<()> {
         let radyko_config = load_example_config()?;
         let radiko_client = radiko_client().await;
-
-        let mut result = Vec::new();
         let program_selectors = ProgramSelector::from_rules(radyko_config.rules.unwrap())?;
-        for program_selector in program_selectors {
-            let programs = resolve_selector(radiko_client, program_selector).await?;
-            result.extend(programs);
-        }
+        let result = Programs::resolve_selectors(radiko_client, program_selectors).await?;
 
         assert!(result.is_empty().not());
         println!("resolve rule programs: {:#?}", result);
