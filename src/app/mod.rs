@@ -1,3 +1,4 @@
+pub mod audio_segments;
 pub mod config;
 pub mod hls;
 pub mod program_reserver;

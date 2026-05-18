@@ -56,6 +56,8 @@ use tokio::{
 };
 use tracing::{Instrument, error, info, info_span, trace, warn};
 
+use crate::app::audio_segments::{AudioSegment, AudioSegments};
+
 #[derive(Debug)]
 pub struct ByteSize(u64);
 
@@ -77,21 +79,6 @@ pub struct StreamHandler {
 #[derive(Debug)]
 struct StreamHandlerRef {
     client: reqwest::Client,
-}
-
-#[derive(Debug)]
-struct AudioSegment {
-    sequence: usize,
-    audio_bytes: Bytes,
-}
-
-impl AudioSegment {
-    pub fn new(sequence: usize, audio_bytes: Bytes) -> Self {
-        Self {
-            sequence,
-            audio_bytes,
-        }
-    }
 }
 
 impl StreamHandler {
@@ -164,26 +151,20 @@ impl StreamHandler {
     ) -> anyhow::Result<PathBuf> {
         pin_mut!(stream_media_list_urls);
 
-        let mut audio_segments = Vec::new();
+        let mut audio_segments = AudioSegments::new();
         while let Some(media_list_url) = stream_media_list_urls.next().await {
-            let segments = self.collect_audio_segments(&media_list_url?).await?;
-            audio_segments.extend(segments);
+            self.collect_audio_segments(&media_list_url?, &mut audio_segments)
+                .await?;
         }
-        audio_segments.sort_by_key(|a| a.sequence);
 
         tokio::fs::create_dir_all(output_dir.clone()).await?;
         let recording_file_path = Path::new(&output_dir).join(file_name);
-        let mut file = tokio::fs::OpenOptions::new()
+        let mut file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
-            .open(recording_file_path.clone())
-            .await?;
-        for audio_segment in &audio_segments {
-            file.write_all(&audio_segment.audio_bytes).await?;
-        }
-        file.flush().await?;
-        drop(audio_segments);
+            .open(recording_file_path.clone())?;
+        audio_segments.flush(&mut file)?;
 
         Ok(recording_file_path)
     }
@@ -191,7 +172,8 @@ impl StreamHandler {
     async fn collect_audio_segments(
         &self,
         media_list_url: &str,
-    ) -> anyhow::Result<Vec<AudioSegment>> {
+        audio_segments: &mut AudioSegments,
+    ) -> anyhow::Result<()> {
         let media_playlist_response = self
             .inner
             .client
@@ -211,7 +193,6 @@ impl StreamHandler {
         let media_sequence = media_play_list.media_sequence;
         let segments = media_play_list.segments;
 
-        let mut audio_segments = Vec::new();
         for (segment_sequence, segment) in segments {
             let segment_url = segment.uri();
             let processing_sequence = media_sequence + segment_sequence;
@@ -233,10 +214,10 @@ impl StreamHandler {
                 .await
                 .context("failed skip id3 tag bytes")?;
 
-            audio_segments.push(AudioSegment::new(processing_sequence, audio_bytes));
+            audio_segments.push_segment(AudioSegment::new(processing_sequence, audio_bytes));
         }
 
-        Ok(audio_segments)
+        Ok(())
     }
 
     /// 録音ファイルサイズが下限サイズ(約5秒の欠落を許容)を満たしているかをチェックします
