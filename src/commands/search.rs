@@ -10,7 +10,7 @@ pub async fn run(args: SearchArgs) -> anyhow::Result<()> {
     let programs = radiko_client
         .search_programs(args.keyword, args.station_id.as_deref())
         .await?
-        .data;
+        .to_vec();
 
     // println!(): programsをforで回しながらprintln!()するとprintln!()のたびにstdioをロックする。
     // writeln!(): 一度stdioをロックして、出力内容をbufferに書き溜めて最後に一度表示する方法が効率が良い。

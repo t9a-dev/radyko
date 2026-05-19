@@ -7,7 +7,6 @@ use crate::{
         utils::{self, Utils},
     },
     cli::RecorderArgs,
-    commands::common::collect_program_selectors,
     model::program::{duration_buffer::RecordingDurationBuffer, programs::Programs},
 };
 use std::{
@@ -58,12 +57,11 @@ async fn reserve(
     tx: tokio::sync::mpsc::Sender<RecordingEvent>,
 ) -> anyhow::Result<()> {
     info!("local now: {}", utils::Utils::formated_now_in_tz_tokyo()?);
-    let program_selectors = collect_program_selectors(
-        &recorder_state
-            .config()
-            .read()
-            .expect("recorder_state config RwLock poisoned"),
-    )?;
+    let program_selectors = recorder_state
+        .config()
+        .read()
+        .expect("recorder_state config RwLock poisoned")
+        .collect_program_selectors()?;
     let programs =
         Programs::resolve_selectors(&recorder_state.app_state().radiko_client, program_selectors)
             .await?;

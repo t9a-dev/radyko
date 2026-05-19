@@ -21,7 +21,7 @@ mod timefree_test {
             )
             .await?;
 
-        assert!(programs.data.is_empty().not());
+        assert!(programs.to_vec().is_empty().not());
         println!("resolve keyword programs: {:#?}", programs);
 
         /*
@@ -43,8 +43,9 @@ mod timefree_test {
                 Some("LFR"),
                 None,
             )
-            .await?;
-        let dummy_program = timefree_programs.data.first().unwrap();
+            .await?
+            .to_vec();
+        let dummy_program = timefree_programs.first().unwrap();
 
         println!("resolve keyword program: {:#?}", dummy_program);
         /*

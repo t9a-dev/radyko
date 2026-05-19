@@ -6,20 +6,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     RADYKO_CONCURRENCY,
-    app::{
-        program_selector::{Keywords, ProgramSelector, StartTimes},
-        types::Station,
-    },
+    app::program_selector::ProgramSelector,
     model::program::{error::ProgramParseError, program::Program, program_id::ProgramId},
     radiko::{RadikoClient, dto::program_xml::RadikoProgramXml},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Programs {
-    pub data: Vec<Program>,
+    data: Vec<Program>,
 }
 
 impl Programs {
+    pub fn to_vec(&self) -> Vec<Program> {
+        self.data.clone()
+    }
+
     pub fn find_program(self, start_at: Zoned) -> Option<Program> {
         self.data.into_iter().find(|p| p.start_time.eq(&start_at))
     }
@@ -46,7 +47,7 @@ impl Programs {
         selectors: Vec<ProgramSelector>,
     ) -> anyhow::Result<Vec<Program>> {
         let mut programs = futures::stream::iter(selectors)
-            .map(|selector| async move { selector.resolve_selector(radiko_client).await })
+            .map(|selector| async move { selector.resolve(radiko_client).await })
             .buffer_unordered(RADYKO_CONCURRENCY)
             .try_fold(Vec::new(), |mut result, programs| async move {
                 result.extend(programs);
@@ -58,51 +59,17 @@ impl Programs {
         Ok(programs)
     }
 
-    pub async fn resolve_keywords(
+    pub async fn start_time_to_programs(
         radiko_client: &RadikoClient,
-        keywords: Keywords,
-        station: Station,
-    ) -> anyhow::Result<Vec<Program>> {
-        let mut programs = Vec::new();
-        let Keywords(keywords) = keywords;
-
-        for keyword in keywords {
-            let result = match station {
-                Station::Nationwide => radiko_client.search_programs(keyword, None).await?,
-                Station::Id(ref station_id) => {
-                    radiko_client
-                        .search_programs(keyword, Some(station_id.as_str()))
-                        .await?
-                }
-            };
-            programs.push(result.data);
-        }
-
-        Ok(programs.into_iter().flatten().collect::<Vec<_>>())
-    }
-
-    pub async fn resolve_start_times(
-        radiko_client: &RadikoClient,
-        start_times: StartTimes,
         station_id: &str,
-    ) -> anyhow::Result<Vec<Program>> {
-        let start_time_to_program: HashMap<Zoned, Program> = radiko_client
+    ) -> anyhow::Result<HashMap<Zoned, Program>> {
+        Ok(radiko_client
             .weekly_programs(station_id)
             .await?
             .data
             .into_iter()
             .map(|program| program.start_time_to_program())
-            .collect();
-
-        let mut programs = Vec::new();
-        let StartTimes(start_times) = start_times;
-        for start_time in start_times {
-            start_time_to_program
-                .get(&start_time)
-                .inspect(|&program| programs.push(program.clone()));
-        }
-
-        Ok(programs)
+            .collect::<HashMap<_, _>>())
     }
 }
 

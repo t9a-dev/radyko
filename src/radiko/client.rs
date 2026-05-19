@@ -82,7 +82,7 @@ impl RadikoClient {
             .program
             .now_on_air_programs(area_id)
             .await?
-            .data
+            .to_vec()
             .into_iter()
             .collect::<Vec<_>>())
     }
@@ -98,7 +98,7 @@ impl RadikoClient {
             condition.station_id = Some(vec![station_id.to_string()]);
         };
 
-        self.inner.search.find_program(&condition).await
+        self.inner.search.search_programs(&condition).await
     }
 
     pub async fn search_timefree_programs_with_keyword(
@@ -123,7 +123,7 @@ impl RadikoClient {
             .start_day
             .insert(start_day.strftime(start_day_format).to_string());
 
-        self.inner.search.find_program(&condition).await
+        self.inner.search.search_programs(&condition).await
     }
 
     pub async fn weekly_programs(&self, station_id: &str) -> anyhow::Result<Programs> {
@@ -196,8 +196,9 @@ mod tests {
                 Some("LFR"),
                 None,
             )
-            .await?;
-        let first_program = timefree_programs.data.first().unwrap();
+            .await?
+            .to_vec();
+        let first_program = timefree_programs.first().unwrap();
         let ProgramId(StationId(station_id), StartAt(start_time), _) = first_program.program_id();
         // 適当に選んだ番組情報から同じ番組情報を見つけられれば良い
         let program = radiko_client

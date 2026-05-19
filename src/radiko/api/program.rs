@@ -91,7 +91,7 @@ mod tests {
     async fn get_now_on_air_programs_smoke() -> anyhow::Result<()> {
         let radiko_program = radiko_program();
         let programs = radiko_program.now_on_air_programs("JP13").await?;
-        assert!(programs.data.is_empty().not());
+        assert!(programs.to_vec().is_empty().not());
 
         Ok(())
     }
@@ -103,7 +103,7 @@ mod tests {
         let station_weekly_programs = radiko_program
             .weekly_programs_by_station(TEST_STATION_ID)
             .await?;
-        assert!(station_weekly_programs.data.is_empty().not());
+        assert!(station_weekly_programs.to_vec().is_empty().not());
 
         Ok(())
     }

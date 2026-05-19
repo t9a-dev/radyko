@@ -8,7 +8,6 @@ use tracing::error;
 use crate::{
     app::{state::AppState, utils::Utils},
     cli::RuleArgs,
-    commands::common::collect_program_selectors,
     model::program::programs::Programs,
 };
 
@@ -17,12 +16,11 @@ pub async fn run(args: RuleArgs) -> anyhow::Result<()> {
     let app_state = Arc::new(AppState::build_from_rule_args(args).await?);
     Utils::is_writable_output_dir(&app_state.output_dir().to_string_lossy());
 
-    let program_selectors = collect_program_selectors(
-        &app_state
-            .config()
-            .read()
-            .expect("app_state config RwLock poisoned"),
-    )?;
+    let program_selectors = app_state
+        .config()
+        .read()
+        .expect("app_state config RwLock poisoned")
+        .collect_program_selectors()?;
     let programs = Programs::resolve_selectors(&app_state.radiko_client, program_selectors).await?;
 
     // println!(): programsをforで回しながらprintln!()するとprintln!()のたびにstdioをロックする。

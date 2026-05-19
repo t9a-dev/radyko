@@ -22,7 +22,7 @@ impl RadikoSearch {
         Self { client }
     }
 
-    pub async fn find_program(&self, condition: &RadikoSearchCondition) -> Result<Programs> {
+    pub async fn search_programs(&self, condition: &RadikoSearchCondition) -> Result<Programs> {
         if condition.key.is_empty() {
             return Err(SearchConditionError::RequireKeyword.into());
         }
@@ -145,8 +145,8 @@ mod tests {
             .key
             .push("オールナイトニッポン".to_string());
 
-        let search_result = radiko_search.find_program(&search_condition).await?;
-        assert!(search_result.data.is_empty().not());
+        let search_result = radiko_search.search_programs(&search_condition).await?;
+        assert!(search_result.to_vec().is_empty().not());
 
         Ok(())
     }
@@ -158,7 +158,7 @@ mod tests {
         let mut search_condition = RadikoSearchCondition::new();
         search_condition.station_id = Some(vec![TEST_STATION_ID.to_string()]);
 
-        let search_result = radiko_search.find_program(&search_condition).await;
+        let search_result = radiko_search.search_programs(&search_condition).await;
         assert_eq!(
             search_result
                 .unwrap_err()

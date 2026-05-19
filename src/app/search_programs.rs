@@ -38,7 +38,7 @@ mod tests {
                 Station::Nationwide
             )
             .await?
-            .data
+            .to_vec()
             .is_empty()
             .not()
         );
@@ -50,7 +50,7 @@ mod tests {
                 Station::Id(TEST_STATION_ID.to_string())
             )
             .await?
-            .data
+            .to_vec()
             .is_empty()
             .not()
         );

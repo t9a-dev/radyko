@@ -1,8 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
+use jiff::Zoned;
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 
-use crate::app::types::Station;
+use crate::app::{program_selector::ProgramSelector, types::Station};
 
 pub const EXAMPLE_CONFIG: &str = r#"# src/app/config.rs
 
@@ -59,15 +61,54 @@ pub struct RecordingDurationBufferConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RadykoConfigKeywords(pub HashMap<Station, Vec<String>>);
+pub struct RadykoConfigKeywords(HashMap<Station, Vec<String>>);
+
+impl RadykoConfigKeywords {
+    pub fn new(keywords: HashMap<Station, Vec<String>>) -> Self {
+        Self(keywords)
+    }
+
+    pub fn into_program_selectors(self) -> Vec<ProgramSelector> {
+        self.0
+            .into_iter()
+            .map(|(station_id, keywords)| {
+                ProgramSelector::new_keyword_selector(station_id, keywords)
+            })
+            .collect()
+    }
+}
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RadykoConfigRules(pub HashMap<Station, Vec<String>>);
+pub struct RadykoConfigRules(HashMap<Station, Vec<String>>);
+
+impl RadykoConfigRules {
+    pub fn new(rules: HashMap<Station, Vec<String>>) -> Self {
+        Self(rules)
+    }
+
+    pub fn try_into_program_selectors(
+        self,
+        now: Option<Zoned>,
+    ) -> anyhow::Result<Vec<ProgramSelector>> {
+        Ok(self
+            .0
+            .into_iter()
+            .flat_map(|(station_id, cron_list)| {
+                cron_list
+                    .into_iter()
+                    .flat_map(|cron| {
+                        ProgramSelector::new_rule_selector(station_id.clone(), cron, now.clone())
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>())
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RadykoConfig {
     pub recording: RecordingConfig,
-    pub keywords: Option<RadykoConfigKeywords>,
-    pub rules: Option<RadykoConfigRules>,
+    keywords: Option<RadykoConfigKeywords>,
+    rules: Option<RadykoConfigRules>,
 }
 impl RadykoConfig {
     pub fn parse<R: std::io::Read>(mut reader: R) -> anyhow::Result<Self> {
@@ -80,5 +121,23 @@ impl RadykoConfig {
     pub fn parse_from_path(config_path: PathBuf) -> anyhow::Result<Self> {
         let reader = std::fs::File::open(config_path)?;
         Self::parse(reader)
+    }
+
+    pub fn collect_program_selectors(&self) -> anyhow::Result<Vec<ProgramSelector>> {
+        let mut selectors = Vec::new();
+        if self.keywords.is_none() && self.rules.is_none() {
+            warn!("keywords and rules config is empty");
+            return Ok(selectors);
+        }
+
+        match self.keywords.clone() {
+            Some(keywords) => selectors.extend(keywords.into_program_selectors()),
+            None => info!("keywords not found."),
+        }
+        match self.rules.clone() {
+            Some(rules) => selectors.extend(rules.try_into_program_selectors(None)?),
+            None => info!("rules not found."),
+        }
+        Ok(selectors)
     }
 }
