@@ -6,7 +6,11 @@ use reqwest::Client;
 
 use crate::{
     app::utils::Utils,
-    model::program::{program::Program, programs::Programs},
+    model::program::{
+        program::Program,
+        program_id::{ProgramId, SeekStartAt, StartAt, StationId},
+        programs::Programs,
+    },
     radiko::api::{
         auth::{RadikoAuth, RadikoCredential},
         program::RadikoProgram,
@@ -53,25 +57,23 @@ impl RadikoClient {
         self.inner.stream.live_stream_url(station_id)
     }
 
-    pub async fn media_list_url_for_live(&self, station_id: &str) -> anyhow::Result<String> {
+    pub async fn media_list_url_for_live(&self, station_id: StationId) -> anyhow::Result<String> {
         Ok(self
             .inner
             .stream
-            .get_medialist_url_for_live(station_id)
+            .get_medialist_url_for_live(&station_id.get())
             .await?
             .to_string())
     }
 
     pub async fn media_list_url_for_timefree(
         &self,
-        station_id: String,
-        start_at: Zoned,
-        end_at: Zoned,
-        seek: Zoned,
+        program_id: ProgramId,
+        seek_start_at: SeekStartAt,
     ) -> anyhow::Result<String> {
         self.inner
             .stream
-            .get_medialist_url_for_timefree(station_id, start_at, end_at, seek)
+            .get_medialist_url_for_timefree(program_id, seek_start_at)
             .await
     }
 
@@ -135,21 +137,17 @@ impl RadikoClient {
 
     pub async fn find_program(
         &self,
-        start_at: Zoned,
-        station_id: &str,
+        start_at: &StartAt,
+        station_id: &StationId,
     ) -> anyhow::Result<Option<Program>> {
         self.inner.program.find_program(station_id, start_at).await
     }
 
     pub fn stream_timefree_medialist_urls(
         &self,
-        station_id: String,
-        start_at: Zoned,
-        end_at: Zoned,
+        program_id: ProgramId,
     ) -> impl Stream<Item = anyhow::Result<String>> {
-        self.inner
-            .stream
-            .stream_timefree_medialist_urls(station_id, start_at, end_at)
+        self.inner.stream.stream_timefree_medialist_urls(program_id)
     }
 
     async fn init(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
@@ -181,10 +179,7 @@ impl RadikoClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        model::program::program_id::{ProgramId, StartAt, StationId},
-        test_helper::radiko_client,
-    };
+    use crate::test_helper::radiko_client;
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
@@ -199,10 +194,9 @@ mod tests {
             .await?
             .to_vec();
         let first_program = timefree_programs.first().unwrap();
-        let ProgramId(StationId(station_id), StartAt(start_time), _) = first_program.program_id();
         // 適当に選んだ番組情報から同じ番組情報を見つけられれば良い
         let program = radiko_client
-            .find_program(start_time.clone(), &station_id)
+            .find_program(&first_program.start_at(), &first_program.station_id())
             .await?;
 
         assert!(program.is_some());

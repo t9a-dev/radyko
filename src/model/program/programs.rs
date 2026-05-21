@@ -1,17 +1,23 @@
 use std::{cmp::Reverse, collections::HashMap};
 
 use futures::{StreamExt, TryStreamExt, stream};
-use jiff::Zoned;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     RADYKO_CONCURRENCY,
     app::program_selector::ProgramSelector,
-    model::program::{error::ProgramParseError, program::Program, program_id::ProgramId},
-    radiko::{RadikoClient, dto::program_xml::RadikoProgramXml},
+    model::program::{
+        error::ProgramParseError,
+        program::Program,
+        program_id::{ProgramId, StartAt},
+    },
+    radiko::{
+        RadikoClient,
+        dto::{json::program_json::RootJson, xml::program_xml::RadikoProgramXml},
+        jst_datetime::RadykoDateTime,
+    },
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Programs {
     data: Vec<Program>,
 }
@@ -21,18 +27,22 @@ impl Programs {
         self.data.clone()
     }
 
-    pub fn find_program(self, start_at: Zoned) -> Option<Program> {
-        self.data.into_iter().find(|p| p.start_time.eq(&start_at))
+    pub fn find_program(self, start_at: &StartAt) -> Option<Program> {
+        self.data.into_iter().find(|p| p.start_at().eq(start_at))
     }
 
     pub async fn resolve_program_ids(
         radiko_client: &RadikoClient,
         ids: Vec<ProgramId>,
     ) -> anyhow::Result<Vec<Program>> {
-        let programs = stream::iter(ids.iter())
+        let programs = stream::iter(ids)
             .map(|id| {
                 let radiko_client = radiko_client.clone();
-                async move { radiko_client.find_program(id.clone().1.0, &id.0.0).await }
+                async move {
+                    radiko_client
+                        .find_program(id.start_at(), id.station_id())
+                        .await
+                }
             })
             .buffer_unordered(RADYKO_CONCURRENCY)
             .try_filter_map(|program| async move { Ok(program) })
@@ -54,7 +64,7 @@ impl Programs {
                 Ok(result)
             })
             .await?;
-        programs.sort_by_key(|p| Reverse(p.start_time.clone()));
+        programs.sort_by_key(|p| Reverse(p.program_id().start_at().clone().date()));
 
         Ok(programs)
     }
@@ -62,7 +72,7 @@ impl Programs {
     pub async fn start_time_to_programs(
         radiko_client: &RadikoClient,
         station_id: &str,
-    ) -> anyhow::Result<HashMap<Zoned, Program>> {
+    ) -> anyhow::Result<HashMap<StartAt, Program>> {
         Ok(radiko_client
             .weekly_programs(station_id)
             .await?
@@ -91,5 +101,22 @@ impl TryFrom<RadikoProgramXml> for Programs {
             }
         }
         Ok(Programs { data: programs })
+    }
+}
+
+impl TryFrom<RootJson> for Programs {
+    type Error = ProgramParseError;
+
+    fn try_from(value: RootJson) -> Result<Self, Self::Error> {
+        let Some(programs_json) = value.data else {
+            return Ok(Self { data: vec![] });
+        };
+
+        Ok(Self {
+            data: programs_json
+                .into_iter()
+                .flat_map(Program::try_from)
+                .collect::<Vec<_>>(),
+        })
     }
 }

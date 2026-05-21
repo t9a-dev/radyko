@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::logo_xml::LogoXml;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename = "stations")]
 pub struct StationsXml {
     #[serde(rename = "@area_id")]
@@ -13,7 +13,7 @@ pub struct StationsXml {
     pub stations: Vec<StationXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct StationXml {
     pub id: String,
     pub name: String,

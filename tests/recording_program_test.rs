@@ -4,14 +4,18 @@ mod common;
 mod recording_program_test {
     use std::{path::PathBuf, sync::Arc, time::Duration};
 
-    use crate::common::tests_common::TestProgram;
-    use jiff::{ToSpan, Zoned};
     use radyko::{
         app::{
             config::{RecordingConfig, RecordingDurationBufferConfig},
             program_reserver::ProgramReserver,
+            utils::Utils,
         },
-        model::program::duration_buffer::RecordingDurationBuffer,
+        model::program::{
+            duration_buffer::RecordingDurationBuffer,
+            program::Program,
+            program_id::{EndAt, ProgramId, StartAt},
+        },
+        radiko::jst_datetime::RadykoDateTime,
         telemetry::init_telemetry,
     };
     use tempfile::TempDir;
@@ -27,6 +31,7 @@ mod recording_program_test {
         let now_on_air_programs = radiko_client
             .now_on_air_programs(Some(TEST_AREA_ID))
             .await?;
+        let program = now_on_air_programs.first().unwrap();
         let temp_dir = TempDir::new()?;
         let recording_config = RecordingConfig {
             output_dir: PathBuf::from(temp_dir.path()),
@@ -37,12 +42,17 @@ mod recording_program_test {
             radiko_client.clone(),
             recording_config.output_dir,
         ));
-        let now = Zoned::now().in_tz("UTC")?;
+        let now = Utils::now_in_tz_tokyo();
         let recording_duration_secs = 5;
         // 今放送している適当な番組を録音
-        let test_reserve_program = now_on_air_programs[0].with_start_end_time(
-            now.clone(),
-            now.checked_add(recording_duration_secs.seconds())?,
+        let test_reserve_program = Program::new(
+            ProgramId::new(
+                program.station_id(),
+                StartAt::new(now.clone()),
+                EndAt::new(now.saturating_add(Duration::from_secs(recording_duration_secs))),
+            ),
+            program.title(),
+            program.performer(),
         );
         let (tx, _rx) = tokio::sync::mpsc::channel(100);
         program_reserver

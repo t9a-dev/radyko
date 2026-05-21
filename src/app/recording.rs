@@ -30,7 +30,7 @@ pub async fn start_for_live(
             media_list_url,
             program.output_dir(output_root_dir),
             &program.output_filename(),
-            Duration::from_secs(on_air_duration.0),
+            Duration::from_secs(on_air_duration.get()),
         )
         .await
 }

@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename = "radiko")]
 pub struct RadikoProgramXml {
     pub ttl: Option<u32>,
@@ -8,13 +8,13 @@ pub struct RadikoProgramXml {
     pub stations: StationsXml,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct StationsXml {
     #[serde(rename = "station")]
     pub station: Vec<StationXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ProgramsXml {
     pub date: Option<String>,
     #[serde(rename = "prog")]
@@ -26,7 +26,7 @@ pub struct ProgramsXml {
     pub program: Option<Vec<ProgramXml>>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ProgramXml {
     #[serde(rename = "@id")]
     pub id: String,
@@ -43,7 +43,7 @@ pub struct ProgramXml {
     #[serde(rename = "@dur")]
     pub dur: Option<u32>,
 
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(skip_deserializing)]
     /// TryFrom実装でProgram.station_idに設定するのに利用
     pub station_id: String,
 
@@ -64,7 +64,7 @@ pub struct ProgramXml {
     pub metas: Option<MetasXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct StationXml {
     #[serde(rename = "@id")]
     pub id: String,
@@ -73,18 +73,18 @@ pub struct StationXml {
     pub programs: Vec<ProgramsXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TagXml {
     #[serde(rename = "item", default)]
     pub items: Vec<TagItemXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TagItemXml {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct GenreXml {
     #[serde(rename = "program", default)]
     pub programs: Vec<GenreProgramXml>,
@@ -92,27 +92,27 @@ pub struct GenreXml {
     pub personalities: Vec<GenrePersonalityXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct GenreProgramXml {
     #[serde(rename = "@id")]
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct GenrePersonalityXml {
     #[serde(rename = "@id")]
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MetasXml {
     #[serde(rename = "meta", default)]
     pub metas: Vec<MetaXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MetaXml {
     #[serde(rename = "@name")]
     pub name: String,

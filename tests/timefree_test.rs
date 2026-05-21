@@ -72,7 +72,7 @@ mod timefree_test {
         let file = fs::File::open(downloaded_file_path)?;
         StreamHandler::verify_recorded_file(
             ByteSize::from_bytes(file.metadata()?.len()),
-            Duration::from_secs(dummy_program.on_air_duration().0),
+            Duration::from_secs(dummy_program.on_air_duration().get()),
         )?;
 
         Ok(())

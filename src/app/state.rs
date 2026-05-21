@@ -16,17 +16,14 @@ use crate::{
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
-    model::program::{
-        program::Program,
-        program_id::{EndAt, ProgramId},
-    },
-    radiko::{RadikoClient, api::auth::RadikoCredential},
+    model::program::{program::Program, program_id::ProgramId},
+    radiko::{RadikoClient, api::auth::RadikoCredential, jst_datetime::RadykoDateTime},
 };
 
 #[derive(Debug)]
 pub struct AppState {
     config: Arc<RwLock<RadykoConfig>>,
-    pub radiko_client: RadikoClient,
+    radiko_client: RadikoClient,
 }
 
 impl AppState {
@@ -49,6 +46,10 @@ impl AppState {
         let radiko_credential = RadikoCredential::load_from_env_file();
         let radiko_client = RadikoClient::new(radiko_credential).await?;
         Self::new(radyko_config, radiko_client).await
+    }
+
+    pub fn radiko_client(&self) -> RadikoClient {
+        self.radiko_client.clone()
     }
 
     pub fn config(&self) -> Arc<RwLock<RadykoConfig>> {
@@ -105,10 +106,7 @@ impl RecorderState {
         Ok(self
             .get_reserved_program_ids()?
             .into_iter()
-            .filter(|p| {
-                let EndAt(end_at) = &p.2;
-                end_at < now
-            })
+            .filter(|p| p.end_at().date() < now)
             .collect())
     }
 
@@ -227,8 +225,9 @@ mod tests {
         app::state::{AppState, RecorderState},
         model::program::{
             program::Program,
-            program_id::{ProgramId, StationId},
+            program_id::{EndAt, ProgramId, StartAt, StationId},
         },
+        radiko::jst_datetime::RadykoDateTime,
         test_helper::{load_example_config, radiko_client},
     };
 
@@ -250,10 +249,20 @@ mod tests {
             setup_recorder_state(reserved_programs_file.path().to_path_buf()).await?;
 
         let on_air_duration = 1.hours();
-        let start_at =
+        let dummy_start_at =
             DateTime::strptime(DATETIME_FORMAT, "2000-01-01 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
-        let end_at = start_at.checked_add(on_air_duration).unwrap();
-        let program = Program::new("LFR".to_string(), start_at, end_at);
+        let dummy_end_at = dummy_start_at.checked_add(on_air_duration).unwrap();
+        let dummy_title = "オールナイトニッポン".to_string();
+        let dummy_performer = "フワちゃん".to_string();
+        let program = Program::new(
+            ProgramId::new(
+                StationId::new("LFR".to_string()),
+                StartAt::new(dummy_start_at),
+                EndAt::new(dummy_end_at),
+            ),
+            dummy_title,
+            dummy_performer,
+        );
 
         // 録音予約を永続化(LFR)
         recorder_state.append_reserved_program(&[program])?;
@@ -262,8 +271,8 @@ mod tests {
         let all_reserved_program_ids = recorder_state.get_reserved_program_ids()?;
         assert_eq!(all_reserved_program_ids.len(), 1);
         assert_eq!(
-            all_reserved_program_ids.first().unwrap().0,
-            StationId("LFR".to_string())
+            *all_reserved_program_ids.first().unwrap().station_id(),
+            StationId::new("LFR".to_string())
         );
 
         // 放送が終了していない番組情報は取得できない
@@ -277,7 +286,10 @@ mod tests {
             DateTime::strptime(DATETIME_FORMAT, "2000-04-02 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
         let program_ids = recorder_state.collect_aired_program_ids(Some(now))?;
         assert_eq!(program_ids.len(), 1);
-        assert_eq!(program_ids.first().unwrap().0, StationId("LFR".to_string()));
+        assert_eq!(
+            *program_ids.first().unwrap().station_id(),
+            StationId::new("LFR".to_string())
+        );
 
         Ok(())
     }
@@ -293,7 +305,17 @@ mod tests {
         let start_at =
             DateTime::strptime(DATETIME_FORMAT, "2000-01-01 00:00:00")?.in_tz(RADYKO_TZ_NAME)?;
         let end_at = start_at.checked_add(on_air_duration).unwrap();
-        let program = Program::new("LFR".to_string(), start_at.clone(), end_at.clone());
+        let dummy_title = "オールナイトニッポン".to_string();
+        let dummy_performer = "フワちゃん".to_string();
+        let program = Program::new(
+            ProgramId::new(
+                StationId::new("LFR".to_string()),
+                StartAt::new(start_at.clone()),
+                EndAt::new(end_at.clone()),
+            ),
+            dummy_title.clone(),
+            dummy_performer.clone(),
+        );
 
         // 録音予約を永続化(LFR)
         recorder_state.append_reserved_program(&[program.clone()])?;
@@ -311,19 +333,38 @@ mod tests {
 
         // 別の放送局(TBS)情報を指定して予約情報を削除
         // 録音予約(LFR)が残っている
-        let program = Program::new("TBS".to_string(), start_at.clone(), end_at.clone());
+        let program = Program::new(
+            ProgramId::new(
+                StationId::new("TBS".to_string()),
+                StartAt::new(start_at.clone()),
+                EndAt::new(end_at.clone()),
+            ),
+            dummy_title.clone(),
+            dummy_performer.clone(),
+        );
         recorder_state.remove_reserved_program(program.program_id())?;
         let mut content = String::new();
         reserved_programs_file
             .reopen()?
             .read_to_string(&mut content)?;
         assert_eq!(
-            ProgramId::parse_from_string(content)?.first().unwrap().0,
-            StationId("LFR".to_string())
+            *ProgramId::parse_from_string(content)?
+                .first()
+                .unwrap()
+                .station_id(),
+            StationId::new("LFR".to_string())
         );
 
-        // 録音が完了したので予約情報を削除
-        let program = Program::new("LFR".to_string(), start_at.clone(), end_at.clone());
+        // 録音が完了したので"LFR"予約情報を削除
+        let program = Program::new(
+            ProgramId::new(
+                StationId::new("LFR".to_string()),
+                StartAt::new(start_at),
+                EndAt::new(end_at),
+            ),
+            dummy_title,
+            dummy_performer,
+        );
         recorder_state.remove_reserved_program(program.program_id())?;
         let mut content = String::new();
         reserved_programs_file

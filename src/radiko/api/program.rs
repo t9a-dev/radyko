@@ -1,11 +1,14 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use jiff::Zoned;
 
 use crate::{
-    model::program::{program::Program, programs::Programs},
-    radiko::{api::endpoint::Endpoint, dto::program_xml::RadikoProgramXml},
+    model::program::{
+        program::Program,
+        program_id::{StartAt, StationId},
+        programs::Programs,
+    },
+    radiko::{api::endpoint::Endpoint, dto::xml::program_xml::RadikoProgramXml},
 };
 
 #[derive(Debug, Clone)]
@@ -59,10 +62,10 @@ impl RadikoProgram {
 
     pub async fn find_program(
         &self,
-        station_id: &str,
-        start_at: Zoned,
+        station_id: &StationId,
+        start_at: &StartAt,
     ) -> anyhow::Result<Option<Program>> {
-        let endpoint = Endpoint::weekly_programs_endpoint(station_id);
+        let endpoint = Endpoint::weekly_programs_endpoint(&station_id.clone().get());
         let res = self
             .inner
             .client

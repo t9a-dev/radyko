@@ -4,7 +4,7 @@ use crate::{
         region::{Region, RegionStation, RegionStations},
         station::{Station, Stations},
     },
-    radiko::dto::{
+    radiko::dto::xml::{
         logo_xml::LogoXml,
         region_xml::{RegionStationXml, RegionStationsXml, RegionXml},
         station_xml::{StationXml, StationsXml},
@@ -93,51 +93,5 @@ impl From<LogoXml> for Logo {
             align: value.align,
             url: value.url,
         }
-    }
-}
-
-pub mod jst_datetime {
-
-    use jiff::{Zoned, civil::DateTime};
-    /// https://serde.rs/custom-date-format.html
-    use serde::{self, Deserialize, Deserializer, Serializer};
-    use tracing::error;
-
-    use crate::RADYKO_TZ_NAME;
-
-    const FORMAT: &str = "%Y-%m-%d %H:%M:%S";
-
-    // The signature of a serialize_with function must follow the pattern:
-    //
-    //    fn serialize<S>(&T, S) -> Result<S::Ok, S::Error>
-    //    where
-    //        S: Serializer
-    //
-    // although it may also be generic over the input types T.
-    pub fn serialize<S>(date: &Zoned, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let s = format!("{}", date.strftime(FORMAT));
-        serializer.serialize_str(&s)
-    }
-
-    // The signature of a deserialize_with function must follow the pattern:
-    //
-    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
-    //    where
-    //        D: Deserializer<'de>
-    //
-    // although it may also be generic over the output types T.
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Zoned, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Ok(DateTime::strptime(FORMAT, &s)
-            .unwrap()
-            .in_tz(RADYKO_TZ_NAME)
-            .map_err(|e| error!("jst_datetime deserialize error s: {s} error: {e:#?}"))
-            .unwrap())
     }
 }

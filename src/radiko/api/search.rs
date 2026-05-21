@@ -3,8 +3,11 @@ use serde_with::skip_serializing_none;
 use strum_macros::{AsRefStr, Display};
 use thiserror::Error;
 
-use crate::{model::program::programs::Programs, radiko::api::endpoint::Endpoint};
-use anyhow::Result;
+use crate::{
+    model::program::programs::Programs,
+    radiko::{api::endpoint::Endpoint, dto::json::program_json::RootJson},
+};
+use anyhow::{Context, Result};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum SearchConditionError {
@@ -36,7 +39,9 @@ impl RadikoSearch {
             .text()
             .await?;
 
-        Ok(serde_json::from_str(res)?)
+        serde_json::from_str::<RootJson>(res)?
+            .try_into()
+            .context("response json deserialize error")
     }
 }
 

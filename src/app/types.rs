@@ -1,10 +1,30 @@
 use crate::model::program::program_id::ProgramId;
 
 #[derive(Debug, Copy, Clone)]
-pub struct Seconds(pub u64);
+pub struct Seconds(u64);
+
+impl Seconds {
+    pub fn new(seconds: u64) -> Self {
+        Self(seconds)
+    }
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Keyword(pub String);
+pub struct Keyword(String);
+
+impl Keyword {
+    pub fn new(keyword: String) -> Self {
+        Self(keyword)
+    }
+
+    pub fn get(self) -> String {
+        self.0
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 /// radikoにおける放送局のId. TBS,LFRなど

@@ -8,8 +8,8 @@ use tracing::warn;
 
 use crate::{
     app::{types::Station, utils::Utils},
-    model::program::{program::Program, programs::Programs},
-    radiko::RadikoClient,
+    model::program::{program::Program, program_id::StartAt, programs::Programs},
+    radiko::{RadikoClient, jst_datetime::RadykoDateTime},
 };
 
 #[derive(Debug, Error, PartialEq)]
@@ -18,7 +18,7 @@ pub enum ScheduleError {
     InvalidCron(String),
 }
 
-pub struct StartTimes(Vec<Zoned>);
+pub struct StartTimes(Vec<StartAt>);
 
 impl StartTimes {
     fn from_cron(cron: String, days: Span, now: Option<Zoned>) -> anyhow::Result<Self> {
@@ -36,11 +36,12 @@ impl StartTimes {
             schedule
                 .after(&target_datetime)
                 .take_while(|datetime| *datetime < days_after)
+                .map(StartAt::new)
                 .collect::<Vec<_>>(),
         ))
     }
 
-    fn resolve_programs(self, start_time_to_programs: HashMap<Zoned, Program>) -> Vec<Program> {
+    fn resolve_programs(self, start_time_to_programs: HashMap<StartAt, Program>) -> Vec<Program> {
         let mut programs = Vec::new();
         for start_time in self.0 {
             start_time_to_programs
@@ -75,6 +76,7 @@ impl Keywords {
         Ok(programs.into_iter().flatten().collect::<Vec<_>>())
     }
 }
+
 pub enum Selector {
     StartTimes(StartTimes),
     Keywords(Keywords),

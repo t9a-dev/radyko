@@ -12,10 +12,10 @@ pub async fn search_programs(
     match station {
         Station::Id(station_id) => {
             radiko_client
-                .search_programs(keyword.0, Some(&station_id))
+                .search_programs(keyword.get(), Some(&station_id))
                 .await
         }
-        Station::Nationwide => radiko_client.search_programs(keyword.0, None).await,
+        Station::Nationwide => radiko_client.search_programs(keyword.get(), None).await,
     }
 }
 
@@ -34,7 +34,7 @@ mod tests {
         assert!(
             search_programs(
                 radiko_client,
-                Keyword("オールナイトニッポン".to_string()),
+                Keyword::new("オールナイトニッポン".to_string()),
                 Station::Nationwide
             )
             .await?
@@ -46,7 +46,7 @@ mod tests {
         assert!(
             search_programs(
                 radiko_client,
-                Keyword("クラシック".to_string()),
+                Keyword::new("クラシック".to_string()),
                 Station::Id(TEST_STATION_ID.to_string())
             )
             .await?

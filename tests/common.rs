@@ -5,11 +5,7 @@ pub mod tests_common {
     use std::io::BufReader;
     use std::io::Cursor;
 
-    use jiff::Zoned;
     use radyko::app::config;
-    use radyko::model::program::program::Program;
-    use radyko::model::program::program_id::ProgramId;
-    use radyko::model::program::program_id::StationId;
     use radyko::{app::config::RadykoConfig, radiko::RadikoClient};
     use tokio::sync::OnceCell;
 
@@ -32,17 +28,5 @@ pub mod tests_common {
         RADIKO_CLIENT
             .get_or_init(|| async { RadikoClient::new(None).await.unwrap() })
             .await
-    }
-
-    pub trait TestProgram {
-        fn with_start_end_time(&self, start: Zoned, end: Zoned) -> Self;
-    }
-
-    impl TestProgram for Program {
-        /// テスト用に放送時間を差し替えたProgramを返す
-        fn with_start_end_time(&self, start: Zoned, end: Zoned) -> Self {
-            let ProgramId(StationId(station_id), _, _) = self.program_id();
-            Self::new(station_id, start, end)
-        }
     }
 }

@@ -62,9 +62,11 @@ async fn reserve(
         .read()
         .expect("recorder_state config RwLock poisoned")
         .collect_program_selectors()?;
-    let programs =
-        Programs::resolve_selectors(&recorder_state.app_state().radiko_client, program_selectors)
-            .await?;
+    let programs = Programs::resolve_selectors(
+        &recorder_state.app_state().radiko_client(),
+        program_selectors,
+    )
+    .await?;
 
     // println!(): programsをforで回しながらprintln!()するとprintln!()のたびにstdioをロックする。
     // writeln!(): 一度stdioをロックして、出力内容をbufferに書き溜めて最後に一度表示するので効率が良い。
@@ -73,7 +75,7 @@ async fn reserve(
     let mut writer = BufWriter::new(stdio.lock());
 
     let program_reserver = ProgramReserver::new(
-        recorder_state.app_state().radiko_client.clone(),
+        recorder_state.app_state().radiko_client(),
         recorder_state.recording_config().output_dir,
     );
     let reserved_programs = recorder_state.add_reserve_programs(programs);
@@ -95,7 +97,7 @@ async fn reserve(
 
 async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
     let program_ids = recorder_state.collect_aired_program_ids(None)?;
-    let radiko_client = &recorder_state.app_state().radiko_client;
+    let radiko_client = &recorder_state.app_state().radiko_client();
     let timefree_programs = Programs::resolve_program_ids(radiko_client, program_ids).await?;
     if timefree_programs.is_empty() {
         info!("timefree programs empty");
@@ -104,7 +106,7 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
 
     let radiko_client = recorder_state
         .app_state()
-        .radiko_client
+        .radiko_client()
         .refresh_auth()
         .await?;
     let stream_handler = StreamHandler::new(reqwest::Client::new());
@@ -120,7 +122,7 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
         let recorded_file = fs::File::open(recorded_file_path)?;
         StreamHandler::verify_recorded_file(
             ByteSize::from_bytes(recorded_file.metadata()?.len()),
-            Duration::from_secs(program.on_air_duration().0),
+            Duration::from_secs(program.on_air_duration().get()),
         )?;
         recorder_state.remove_reserved_program(program.program_id())?;
         info!("sucess download timefree {}", program.info());

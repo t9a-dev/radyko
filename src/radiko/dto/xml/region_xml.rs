@@ -1,15 +1,15 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::logo_xml::LogoXml;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename = "region")]
 pub struct RegionXml {
     #[serde(rename = "stations")]
     pub region_stations_groups: Vec<RegionStationsXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RegionStationsXml {
     #[serde(rename = "@ascii_name")]
     pub ascii_name: String,
@@ -21,7 +21,7 @@ pub struct RegionStationsXml {
     pub stations: Vec<RegionStationXml>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RegionStationXml {
     pub id: String,
     pub name: String,
