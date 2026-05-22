@@ -105,7 +105,7 @@ jobs:
 
       - name: Install cross
         if: runner.os == 'Linux' && runner.arch == 'X64'
-        uses: taiki-e/install-action@c070f87102a1c75b3183910f391c1cb887fe13c8 # v2
+        uses: taiki-e/install-action@e0eafa9a0d485c37f97c0f7beb930a58a2facbac # v2
         with:
           tool: cross
 
