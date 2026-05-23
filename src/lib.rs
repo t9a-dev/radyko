@@ -2,7 +2,6 @@ pub mod app;
 pub mod cli;
 pub mod commands;
 mod constants;
-pub mod model;
 pub mod radiko;
 pub mod telemetry;
 
@@ -22,7 +21,7 @@ pub mod test_helper {
     use crate::{
         RADYKO_TZ_NAME,
         app::config::{self, RadykoConfig},
-        radiko::{RadikoClient, api::auth::RadikoCredential},
+        radiko::{RadikoClient, RadikoCredential},
     };
 
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();

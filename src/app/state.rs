@@ -16,8 +16,8 @@ use crate::{
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
-    model::program::{program::Program, program_id::ProgramId},
-    radiko::{RadikoClient, api::auth::RadikoCredential, jst_datetime::RadykoDateTime},
+    radiko::model::program::{Program, ProgramId, RadykoDateTime},
+    radiko::{RadikoClient, RadikoCredential},
 };
 
 #[derive(Debug)]
@@ -223,11 +223,7 @@ mod tests {
     use crate::{
         RADYKO_TZ_NAME,
         app::state::{AppState, RecorderState},
-        model::program::{
-            program::Program,
-            program_id::{EndAt, ProgramId, StartAt, StationId},
-        },
-        radiko::jst_datetime::RadykoDateTime,
+        radiko::model::program::{EndAt, Program, ProgramId, RadykoDateTime, StartAt, StationId},
         test_helper::{load_example_config, radiko_client},
     };
 

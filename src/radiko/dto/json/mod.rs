@@ -1,1 +1,3 @@
-pub(crate) mod program_json;
+mod program_json;
+
+pub use program_json::*;

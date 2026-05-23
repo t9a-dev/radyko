@@ -27,24 +27,3 @@ impl Utils {
         info!("output_dir is writable");
     }
 }
-
-#[cfg(test)]
-mod utils_tests {
-    use jiff::civil::DateTime;
-
-    use crate::{RADYKO_TZ_NAME, radiko::api::endpoint::Endpoint};
-
-    #[test]
-    fn jiff_play_ground() {
-        let datetime_s = "20260426010000";
-        let datetime = DateTime::strptime(Endpoint::DATETIME_FORMAT, datetime_s)
-            .unwrap()
-            .in_tz(RADYKO_TZ_NAME)
-            .unwrap();
-
-        assert_eq!(
-            datetime_s,
-            datetime.strftime(Endpoint::DATETIME_FORMAT).to_string()
-        )
-    }
-}

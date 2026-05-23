@@ -1,7 +1,7 @@
 use crate::{
     app::types::{Keyword, Station},
-    model::program::programs::Programs,
     radiko::RadikoClient,
+    radiko::model::program::Programs,
 };
 
 pub async fn search_programs(

@@ -7,7 +7,7 @@ use tempfile::NamedTempFile;
 
 use crate::{
     RADYKO_CONCURRENCY,
-    model::program::program_id::{ProgramId, SeekStartAt},
+    radiko::model::program::{ProgramId, SeekStartAt},
 };
 
 use super::{auth::RadikoAuth, endpoint::Endpoint};

@@ -10,12 +10,9 @@ mod recording_program_test {
             program_reserver::ProgramReserver,
             utils::Utils,
         },
-        model::program::{
-            duration_buffer::RecordingDurationBuffer,
-            program::Program,
-            program_id::{EndAt, ProgramId, StartAt},
+        radiko::model::program::{
+            Program, RadykoDateTime, RecordingDurationBuffer, {EndAt, ProgramId, StartAt},
         },
-        radiko::jst_datetime::RadykoDateTime,
         telemetry::init_telemetry,
     };
     use tempfile::TempDir;

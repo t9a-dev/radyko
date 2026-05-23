@@ -1,9 +1,6 @@
 use jiff::Zoned;
 
-use crate::{
-    model::program::program_id::{ProgramId, SeekStartAt},
-    radiko::jst_datetime::RadykoDateTime,
-};
+use crate::radiko::model::program::{ProgramId, RadykoDateTime, SeekStartAt};
 
 const V2_URL: &str = "https://radiko.jp/v2/";
 const V3_URL: &str = "https://radiko.jp/v3/";
@@ -18,7 +15,9 @@ impl Endpoint {
     // radiko_session取得に利用
     pub const LOGIN_CHECK_URL: &str = "https://radiko.jp/ap/member/webapi/v2/member/login/check";
 
-    pub const DATETIME_FORMAT: &str = "%Y%m%d%H%M%S";
+    // 型付けされた日付情報を外部から受け取って、このモジュールの中で扱うときにフォーマットする
+    // よって外部に公開(pub)しない
+    const DATETIME_FORMAT: &str = "%Y%m%d%H%M%S";
 
     pub fn area_id_endpoint() -> String {
         AREA_URL.to_string()
@@ -187,8 +186,10 @@ mod tests {
     use crate::{
         RADYKO_TZ_NAME,
         constants::test_constants::TEST_STATION_ID,
-        model::program::program_id::{EndAt, ProgramId, SeekStartAt, StartAt, StationId},
-        radiko::{api::utils::Utils, jst_datetime::RadykoDateTime},
+        radiko::api::utils::Utils,
+        radiko::model::program::{
+            EndAt, ProgramId, RadykoDateTime, SeekStartAt, StartAt, StationId,
+        },
     };
 
     #[test]

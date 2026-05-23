@@ -8,7 +8,7 @@ use tracing::error;
 use crate::{
     app::{state::AppState, utils::Utils},
     cli::RuleArgs,
-    model::program::programs::Programs,
+    radiko::model::program::Programs,
 };
 
 #[tracing::instrument(name = "cli_command_rule")]

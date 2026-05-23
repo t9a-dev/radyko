@@ -7,7 +7,7 @@ use crate::{
         utils::{self, Utils},
     },
     cli::RecorderArgs,
-    model::program::{duration_buffer::RecordingDurationBuffer, programs::Programs},
+    radiko::model::program::{Programs, RecordingDurationBuffer},
 };
 use std::{
     fs,

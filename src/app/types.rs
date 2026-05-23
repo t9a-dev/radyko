@@ -1,4 +1,4 @@
-use crate::model::program::program_id::ProgramId;
+use crate::radiko::model::program::ProgramId;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Seconds(u64);

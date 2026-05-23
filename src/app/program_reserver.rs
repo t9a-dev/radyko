@@ -7,8 +7,8 @@ use crate::{
         recording::{self},
         types::RecordingEvent,
     },
-    model::program::{duration_buffer::RecordingDurationBuffer, program::Program},
     radiko::RadikoClient,
+    radiko::model::program::{Program, RecordingDurationBuffer},
 };
 
 #[derive(Debug, Clone)]

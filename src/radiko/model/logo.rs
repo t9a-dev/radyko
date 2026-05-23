@@ -1,6 +1,6 @@
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Deserialize;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Logo {
     pub width: u32,
     pub height: u32,

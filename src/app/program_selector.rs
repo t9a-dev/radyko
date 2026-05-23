@@ -8,8 +8,8 @@ use tracing::warn;
 
 use crate::{
     app::{types::Station, utils::Utils},
-    model::program::{program::Program, program_id::StartAt, programs::Programs},
-    radiko::{RadikoClient, jst_datetime::RadykoDateTime},
+    radiko::RadikoClient,
+    radiko::model::program::{Program, Programs, RadykoDateTime, StartAt},
 };
 
 #[derive(Debug, Error, PartialEq)]

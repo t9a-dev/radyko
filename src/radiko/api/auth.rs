@@ -1,49 +1,14 @@
-use std::{borrow::Cow, collections::HashMap, env, path::PathBuf, str::FromStr, sync::Arc};
+use std::{borrow::Cow, sync::Arc};
 
 use anyhow::{Result, anyhow};
 
 use base64::{Engine, engine::general_purpose};
 use regex::Regex;
-use reqwest::{
-    Client, Url,
-    cookie::{self, Jar},
-    header::HeaderMap,
-};
-use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use reqwest::{Client, cookie::Jar, header::HeaderMap};
+use tracing::info;
 
-use crate::radiko::api::endpoint::Endpoint;
+use crate::radiko::{RadikoCredential, api::endpoint::Endpoint};
 
-#[derive(Debug, Clone)]
-pub struct RadikoCredential {
-    email_address: SecretString,
-    password: SecretString,
-}
-
-impl RadikoCredential {
-    pub fn load_from_env_file() -> Option<RadikoCredential> {
-        let env_file_path = PathBuf::from(".env");
-        let _ = dotenvy::from_path(&env_file_path);
-        let mail = env::var("RADIKO_AREA_FREE_MAIL");
-        let password = env::var("RADIKO_AREA_FREE_PASSWORD");
-        match (mail, password) {
-            (Ok(mail), Ok(password)) => {
-                info!("success load radiko credential from environment");
-                Some(RadikoCredential {
-                    email_address: SecretString::new(mail.into()),
-                    password: SecretString::new(password.into()),
-                })
-            }
-            _ => {
-                warn!(
-                    "failed load radiko credential from environment env_file_path: {env_file_path:#?}"
-                );
-                None
-            }
-        }
-    }
-}
 #[derive(Debug, Clone)]
 pub struct RadikoAuthedClient(reqwest::Client);
 
@@ -60,19 +25,6 @@ struct RadikoAuthRef {
     auth_token: String,
     stream_lsid: String,
     credential: Option<RadikoCredential>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LoginResponse {
-    twitter_name: Option<String>,
-    status: String,
-    unpaid: String,
-    radiko_session: String,
-    areafree: String,
-    member_ukey: String,
-    facebook_name: Option<String>,
-    privileges: Vec<String>,
-    paid_member: String,
 }
 
 impl RadikoAuth {
@@ -126,7 +78,7 @@ impl RadikoAuth {
         // login
         let is_area_free = &credential.is_some();
         let cookie = match &credential {
-            Some(credential) => RadikoAuth::login(credential).await?,
+            Some(credential) => credential.login().await?,
             _ => Arc::new(Jar::default()),
         };
         let logined_client = Client::builder()
@@ -218,39 +170,6 @@ impl RadikoAuth {
         };
 
         Ok(auth_key_caps["auth_key"].to_string())
-    }
-
-    async fn login(credential: &RadikoCredential) -> Result<Arc<cookie::Jar>> {
-        let mut login_info = HashMap::new();
-        login_info.insert("mail", credential.email_address.expose_secret());
-        login_info.insert("pass", credential.password.expose_secret());
-
-        let login_res: LoginResponse = Client::new()
-            .post(Endpoint::login_endpoint())
-            .form(&login_info)
-            .send()
-            .await?
-            .json()
-            .await?;
-        let cookie = format!("radiko_session={}", login_res.radiko_session);
-        let jar = Arc::new(Jar::default());
-        jar.add_cookie_str(&cookie, &Url::from_str(Endpoint::RADIKO_HOST)?);
-
-        let login_check_res = Client::builder()
-            .cookie_provider(jar.clone())
-            .build()?
-            .get(Endpoint::LOGIN_CHECK_URL)
-            .send()
-            .await?;
-
-        if !login_check_res.status().is_success() {
-            return Err(anyhow!(
-                "login check failed: {}",
-                login_check_res.text().await?
-            ));
-        }
-
-        Ok(jar)
     }
 }
 

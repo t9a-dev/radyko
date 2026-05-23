@@ -1,21 +1,22 @@
-pub mod api;
+mod api;
 mod client;
-mod converter;
-pub(crate) mod dto;
-pub use crate::model::program::program::jst_datetime;
+mod credential;
+mod dto;
+pub mod model;
 
 pub use client::RadikoClient;
+pub use credential::RadikoCredential;
 
 #[cfg(test)]
 mod test_helper {
     use reqwest::Client;
 
-    use crate::radiko::api::{
-        auth::{RadikoAuth, RadikoCredential},
-        program::RadikoProgram,
-        search::RadikoSearch,
-        station::RadikoStation,
-        stream::RadikoStream,
+    use crate::radiko::{
+        RadikoCredential,
+        api::{
+            auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
+            stream::RadikoStream,
+        },
     };
 
     pub enum AuthType {

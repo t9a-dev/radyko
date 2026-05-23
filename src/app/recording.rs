@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use tracing::{info, trace};
 
-use crate::{app::hls::StreamHandler, model::program::program::Program, radiko::RadikoClient};
+use crate::{app::hls::StreamHandler, radiko::RadikoClient, radiko::model::program::Program};
 
 pub struct RetryWithBackOffPolicy {
     pub max_attempts: u32,
