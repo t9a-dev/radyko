@@ -1,8 +1,10 @@
 use std::{path::PathBuf, time::Duration};
 
-use crate::{
-    radiko::dto::json::ProgramJson, radiko::model::program::RadykoDateTime,
-    radiko::model::program::RecordingDurationBuffer,
+use crate::radiko::{
+    dto::json::ProgramJson,
+    model::program::{
+        BufferSecs, RadykoDateTime, RecordingDurationBuffers, duration_buffer::StartBuffer,
+    },
 };
 use futures::Stream;
 use jiff::{ToSpan, Zoned, civil::DateTime};
@@ -11,7 +13,7 @@ use tracing::trace;
 
 use crate::{
     RADYKO_TZ_NAME,
-    app::{types::Seconds, utils::Utils},
+    app::utils::Utils,
     radiko::model::program::{
         ProgramParseError, {EndAt, ProgramId, StartAt, StationId},
     },
@@ -93,28 +95,14 @@ impl Program {
     }
 
     /// 番組開始時間までの秒数を計算してsleep
-    pub async fn wait_for_on_air(&self, buffer: &RecordingDurationBuffer) {
-        let wait_for_on_air_secs = self.to_on_air_duration_with_buffer(None, buffer).get();
+    pub async fn wait_for_live_on_air(&self, start_buffer: &StartBuffer) {
+        let wait_for_on_air_secs = self.to_live_on_air_duration(None, start_buffer).as_secs();
         trace!("wait for on air secs: {}", wait_for_on_air_secs);
         tokio::time::sleep(Duration::from_secs(wait_for_on_air_secs)).await;
     }
 
-    pub fn to_on_air_duration(&self, now: Option<Zoned>) -> Seconds {
-        let now = now.unwrap_or(Utils::now_in_tz_tokyo());
-        Seconds::new(
-            self.program_id()
-                .start_at()
-                .clone()
-                .date()
-                .duration_since(&now)
-                .as_secs()
-                .try_into()
-                .unwrap_or(0),
-        )
-    }
-
-    pub fn on_air_duration(&self) -> Seconds {
-        Seconds::new(
+    pub fn on_air_duration_for_timefree(&self) -> Duration {
+        Duration::from_secs(
             self.program_id()
                 .end_at()
                 .clone()
@@ -126,19 +114,25 @@ impl Program {
         )
     }
 
-    pub fn on_air_duration_with_buffer(&self, buffer: RecordingDurationBuffer) -> Seconds {
-        // buffer分を減算して放送開始時間より前倒しの時間を計算
-        let start_time = self
-            .start_at()
-            .date()
-            .saturating_sub(buffer.start().get().try_into().unwrap_or(0).seconds());
-        // buffer分を加算して放送終了時間より後の時間を計算
-        let end_time = self
-            .end_at()
-            .date()
-            .saturating_add(buffer.end().get().try_into().unwrap_or(0).seconds());
+    pub fn on_air_duration_for_live(&self, buffers: &RecordingDurationBuffers) -> Duration {
+        let start_time = self.start_at().date().saturating_sub(
+            buffers
+                .start_buffer()
+                .secs()
+                .try_into()
+                .unwrap_or(0)
+                .seconds(),
+        );
+        let end_time = self.end_at().date().saturating_add(
+            buffers
+                .end_buffer()
+                .secs()
+                .try_into()
+                .unwrap_or(0)
+                .seconds(),
+        );
 
-        Seconds::new(
+        Duration::from_secs(
             end_time
                 .duration_since(&start_time)
                 .as_secs()
@@ -168,15 +162,18 @@ impl Program {
             .to_string())
     }
 
-    fn to_on_air_duration_with_buffer(
-        &self,
-        now: Option<Zoned>,
-        buffer: &RecordingDurationBuffer,
-    ) -> Seconds {
-        Seconds::new(
-            self.to_on_air_duration(now)
-                .get()
-                .saturating_sub(buffer.start().get()),
+    fn to_live_on_air_duration(&self, now: Option<Zoned>, start_buffer: &StartBuffer) -> Duration {
+        Duration::from_secs(
+            self.program_id()
+                .start_at()
+                .clone()
+                .date()
+                // .saturating_sub(start_buffer.duration())
+                .duration_since(&now.unwrap_or(Utils::now_in_tz_tokyo()))
+                .as_secs()
+                .try_into()
+                .unwrap_or(0_u64)
+                .saturating_sub(start_buffer.secs()),
         )
     }
 }
@@ -316,15 +313,45 @@ pub mod program_id {
 #[cfg(test)]
 mod tests {
 
-    use jiff::Unit;
-
-    use crate::test_helper::parse_datetime_in_tz_tokyo;
+    use crate::{
+        radiko::model::program::{EndBuffer, StartBuffer},
+        test_helper::parse_datetime_in_tz_tokyo,
+    };
 
     use super::*;
 
     #[test]
-    fn on_air_duration_test() {
-        let on_air_duration = 1.hours();
+    fn to_live_on_air_duration_test() -> anyhow::Result<()> {
+        let on_air_duration = Duration::from_hours(1);
+        let dummy_start_time = parse_datetime_in_tz_tokyo("2000-01-15 00:00:00");
+        let dummy_end_time = dummy_start_time.checked_add(on_air_duration).unwrap();
+        let dummy_title = "オールナイトニッポン".to_string();
+        let dummy_performer = "フワちゃん".to_string();
+        let program = Program::new(
+            ProgramId::new(
+                StationId::new("LFR".to_string()),
+                StartAt::new(dummy_start_time),
+                EndAt::new(dummy_end_time),
+            ),
+            dummy_title,
+            dummy_performer,
+        );
+
+        // 番組開始時間までは1分の猶予がある
+        let now = parse_datetime_in_tz_tokyo("2000-01-14 23:59:00");
+        // 番組開始時間より30秒早く録音開始したい
+        let to_live_on_air_duration =
+            program.to_live_on_air_duration(Some(now), &StartBuffer::new(Duration::from_secs(30)));
+
+        // bufferを含めると録音開始時間までの猶予は30秒
+        assert_eq!(to_live_on_air_duration, Duration::from_secs(30));
+
+        Ok(())
+    }
+
+    #[test]
+    fn on_air_duration_for_timefree_test() {
+        let on_air_duration = Duration::from_hours(1);
         let dummy_start_time = parse_datetime_in_tz_tokyo("2000-01-01 00:00:00");
         let dummy_end_time = dummy_start_time.checked_add(on_air_duration).unwrap();
         let dummy_title = "オールナイトニッポン".to_string();
@@ -340,19 +367,19 @@ mod tests {
         );
 
         assert_eq!(
-            on_air_duration.total(Unit::Second).unwrap() as u64,
-            program.on_air_duration().get()
+            program.on_air_duration_for_timefree(),
+            Duration::from_hours(1)
         );
     }
 
     #[test]
-    fn on_air_duration_with_buffer_test() {
-        let on_air_duration = 1.hours();
+    fn on_air_duration_for_live_test() {
+        let on_air_duration = Duration::from_hours(1);
         let dummy_start_time = parse_datetime_in_tz_tokyo("2000-01-01 00:00:00");
         let dummy_end_time = dummy_start_time.checked_add(on_air_duration).unwrap();
 
-        let start_buffer_seconds = 1.minutes().get_seconds() as u64;
-        let end_buffer_seconds = 1.minutes().get_seconds() as u64;
+        let start_buffer = StartBuffer::new(Duration::from_secs(30));
+        let end_buffer = EndBuffer::new(Duration::from_secs(90));
         let dummy_title = "オールナイトニッポン".to_string();
         let dummy_performer = "フワちゃん".to_string();
         let program = Program::new(
@@ -364,17 +391,13 @@ mod tests {
             dummy_title,
             dummy_performer,
         );
+        let recording_duration_buffers = RecordingDurationBuffers::new(start_buffer, end_buffer);
 
         assert_eq!(
-            on_air_duration.total(Unit::Second).unwrap() as u64
-                + start_buffer_seconds
-                + end_buffer_seconds,
-            program
-                .on_air_duration_with_buffer(RecordingDurationBuffer::new(
-                    Seconds::new(start_buffer_seconds),
-                    Seconds::new(end_buffer_seconds)
-                ))
-                .get()
+            program.on_air_duration_for_live(&recording_duration_buffers),
+            on_air_duration
+                .saturating_add(start_buffer.duration())
+                .saturating_add(end_buffer.duration())
         );
     }
 }

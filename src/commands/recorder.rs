@@ -7,13 +7,12 @@ use crate::{
         utils::{self, Utils},
     },
     cli::RecorderArgs,
-    radiko::model::program::{Programs, RecordingDurationBuffer},
+    radiko::model::program::{Programs, RecordingDurationBuffers},
 };
 use std::{
     fs,
     io::{BufWriter, Write},
     sync::Arc,
-    time::Duration,
 };
 use tracing::{debug, error, info};
 
@@ -79,7 +78,7 @@ async fn reserve(
         recorder_state.recording_config().output_dir,
     );
     let reserved_programs = recorder_state.add_reserve_programs(programs);
-    let buffer = RecordingDurationBuffer::from_config(
+    let buffer = RecordingDurationBuffers::from_config(
         recorder_state.recording_config().duration_buffer_secs,
     );
     for program in reserved_programs {
@@ -122,7 +121,7 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
         let recorded_file = fs::File::open(recorded_file_path)?;
         StreamHandler::verify_recorded_file(
             ByteSize::from_bytes(recorded_file.metadata()?.len()),
-            Duration::from_secs(program.on_air_duration().get()),
+            program.on_air_duration_for_timefree(),
         )?;
         recorder_state.remove_reserved_program(program.program_id())?;
         info!("sucess download timefree {}", program.info());

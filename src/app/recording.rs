@@ -1,22 +1,23 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc};
 
 use tracing::{info, trace};
 
-use crate::{app::hls::StreamHandler, radiko::RadikoClient, radiko::model::program::Program};
-
-pub struct RetryWithBackOffPolicy {
-    pub max_attempts: u32,
-    pub base_delay: Duration,
-    pub max_delay: Duration,
-}
+use crate::{
+    app::hls::StreamHandler,
+    radiko::{
+        RadikoClient,
+        model::program::{Program, RecordingDurationBuffers},
+    },
+};
 
 pub async fn start_for_live(
     radiko_client: &RadikoClient,
     program: Arc<Program>,
     output_root_dir: PathBuf,
+    buffers: &RecordingDurationBuffers,
 ) -> anyhow::Result<()> {
     let program_info = program.info();
-    let on_air_duration = program.on_air_duration();
+    let on_air_duration = program.on_air_duration_for_live(buffers);
     trace!(
         "recording for live: on_air_duration_secs: {:#?}, program: {}",
         on_air_duration, program_info
@@ -30,7 +31,7 @@ pub async fn start_for_live(
             media_list_url,
             program.output_dir(output_root_dir),
             &program.output_filename(),
-            Duration::from_secs(on_air_duration.get()),
+            on_air_duration,
         )
         .await
 }

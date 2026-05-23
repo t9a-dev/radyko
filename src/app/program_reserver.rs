@@ -8,7 +8,7 @@ use crate::{
         types::RecordingEvent,
     },
     radiko::RadikoClient,
-    radiko::model::program::{Program, RecordingDurationBuffer},
+    radiko::model::program::{Program, RecordingDurationBuffers},
 };
 
 #[derive(Debug, Clone)]
@@ -36,7 +36,7 @@ impl ProgramReserver {
     pub async fn reserve(
         &self,
         program: Program,
-        buffer: RecordingDurationBuffer,
+        buffer: RecordingDurationBuffers,
         tx: tokio::sync::mpsc::Sender<RecordingEvent>,
     ) -> anyhow::Result<()> {
         // 録音予約はspawnしてawaitせず、そのまま任せる。
@@ -44,7 +44,7 @@ impl ProgramReserver {
         tokio::spawn(
             async move {
                 let program = Arc::new(program);
-                program.wait_for_on_air(&buffer).await;
+                program.wait_for_live_on_air(&buffer.start_buffer()).await;
                 let refreshed_radiko_client = match this.inner.radiko_client.refresh_auth().await {
                     Ok(refreshed_client) => refreshed_client,
                     Err(e) => {
@@ -62,6 +62,7 @@ impl ProgramReserver {
                     &refreshed_radiko_client,
                     Arc::clone(&program),
                     this.inner.output_root_dir.clone(),
+                    &buffer,
                 )
                 .await
                 {

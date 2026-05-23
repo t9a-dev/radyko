@@ -2,7 +2,7 @@ mod common;
 
 #[cfg(test)]
 mod timefree_test {
-    use std::{fs, ops::Not, path::PathBuf, str::FromStr, time::Duration};
+    use std::{fs, ops::Not, path::PathBuf, str::FromStr};
 
     use futures::pin_mut;
     use radyko::app::hls::{ByteSize, StreamHandler};
@@ -72,7 +72,7 @@ mod timefree_test {
         let file = fs::File::open(downloaded_file_path)?;
         StreamHandler::verify_recorded_file(
             ByteSize::from_bytes(file.metadata()?.len()),
-            Duration::from_secs(dummy_program.on_air_duration().get()),
+            dummy_program.on_air_duration_for_timefree(),
         )?;
 
         Ok(())

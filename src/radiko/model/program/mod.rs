@@ -5,7 +5,7 @@ mod program;
 mod program_id;
 mod programs;
 
-pub use duration_buffer::RecordingDurationBuffer;
+pub use duration_buffer::{BufferSecs, EndBuffer, RecordingDurationBuffers, StartBuffer};
 pub use error::ProgramParseError;
 pub use program::Program;
 pub use program::jst_datetime;

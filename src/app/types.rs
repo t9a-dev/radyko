@@ -1,18 +1,5 @@
 use crate::radiko::model::program::ProgramId;
 
-#[derive(Debug, Copy, Clone)]
-pub struct Seconds(u64);
-
-impl Seconds {
-    pub fn new(seconds: u64) -> Self {
-        Self(seconds)
-    }
-
-    pub fn get(self) -> u64 {
-        self.0
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct Keyword(String);
 

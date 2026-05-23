@@ -11,7 +11,7 @@ mod recording_program_test {
             utils::Utils,
         },
         radiko::model::program::{
-            Program, RadykoDateTime, RecordingDurationBuffer, {EndAt, ProgramId, StartAt},
+            Program, RadykoDateTime, RecordingDurationBuffers, {EndAt, ProgramId, StartAt},
         },
         telemetry::init_telemetry,
     };
@@ -55,7 +55,7 @@ mod recording_program_test {
         program_reserver
             .reserve(
                 test_reserve_program,
-                RecordingDurationBuffer::from_config(None),
+                RecordingDurationBuffers::from_config(None),
                 tx,
             )
             .await?;
