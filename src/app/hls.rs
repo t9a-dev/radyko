@@ -47,7 +47,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use bytes::{Buf, Bytes};
-use futures::{Stream, StreamExt, pin_mut};
+use futures::{StreamExt, stream::BoxStream};
 use hls_m3u8::MediaPlaylist;
 use tokio::{
     io::AsyncWriteExt,
@@ -145,12 +145,10 @@ impl StreamHandler {
 
     pub async fn download_timefree_program(
         &self,
-        stream_media_list_urls: impl Stream<Item = anyhow::Result<String>>,
+        mut stream_media_list_urls: BoxStream<'static, anyhow::Result<String>>,
         output_dir: PathBuf,
         file_name: &str,
     ) -> anyhow::Result<PathBuf> {
-        pin_mut!(stream_media_list_urls);
-
         let mut audio_segments = AudioSegments::new();
         while let Some(media_list_url) = stream_media_list_urls.next().await {
             self.collect_audio_segments(&media_list_url?, &mut audio_segments)

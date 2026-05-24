@@ -1,16 +1,16 @@
 use crate::{
+    RADYKO_CONCURRENCY,
     app::{
-        hls::{ByteSize, StreamHandler},
         program_reserver::ProgramReserver,
         state::{AppState, RecorderState},
         types::RecordingEvent,
         utils::{self, Utils},
     },
     cli::RecorderArgs,
-    radiko::model::program::{Programs, RecordingDurationBuffers},
+    radiko::model::program::{Program, Programs, RecordingDurationBuffers},
 };
+use futures::{StreamExt, stream::BoxStream};
 use std::{
-    fs,
     io::{BufWriter, Write},
     sync::Arc,
 };
@@ -103,35 +103,51 @@ async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyho
         return Ok(());
     }
 
-    let stream_handler = StreamHandler::new(reqwest::Client::new());
-    for program in timefree_programs {
-        recorder_state
-            .app_state()
-            .radiko_client()
-            .refresh_auth()
-            .await?;
+    let http_client = reqwest::Client::new();
+    let mut stream_download_timefree_programs =
+        stream_download_timefree_programs(recorder_state, timefree_programs, http_client).await;
 
-        let shared_radiko_client = Arc::clone(&recorder_state.app_state().radiko_client());
-        let stream_media_list_urls = program
-            .stream_timefree_medialist_urls(shared_radiko_client)
-            .await;
-        let recorded_file_path = stream_handler
-            .download_timefree_program(
-                stream_media_list_urls,
-                program.output_dir(recorder_state.app_state().output_dir()),
-                &program.output_filename(),
-            )
-            .await?;
-        let recorded_file = fs::File::open(recorded_file_path)?;
-        StreamHandler::verify_recorded_file(
-            ByteSize::from_bytes(recorded_file.metadata()?.len()),
-            program.on_air_duration_for_timefree(),
-        )?;
-        recorder_state.remove_reserved_program(program.program_id())?;
-        info!("sucess download timefree {}", program.info());
+    while let Some(Err(e)) = stream_download_timefree_programs.next().await {
+        error!("timefree download error: {e:#?}");
     }
 
     Ok(())
+}
+
+async fn stream_download_timefree_programs(
+    recorder_state: Arc<RecorderState>,
+    programs: Vec<Program>,
+    http_client: reqwest::Client,
+) -> BoxStream<'static, anyhow::Result<()>> {
+    futures::stream::iter(programs)
+        .map(move |program| {
+            let shared_http_client = http_client.clone();
+            let shared_recorder_state = Arc::clone(&recorder_state);
+            async move {
+                info!("start download timefree {}", program.info());
+                shared_recorder_state
+                    .app_state()
+                    .radiko_client()
+                    .refresh_auth()
+                    .await?;
+
+                let shared_radiko_client =
+                    Arc::clone(&shared_recorder_state.app_state().radiko_client());
+                program
+                    .download_timefree(
+                        shared_recorder_state.app_state().output_dir(),
+                        shared_radiko_client,
+                        shared_http_client.clone(),
+                    )
+                    .await?;
+                shared_recorder_state.remove_reserved_program(program.program_id())?;
+
+                info!("sucess download timefree {}", program.info());
+                Ok(())
+            }
+        })
+        .buffer_unordered(RADYKO_CONCURRENCY)
+        .boxed()
 }
 
 async fn recording_event_handler(

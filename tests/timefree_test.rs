@@ -2,10 +2,7 @@ mod common;
 
 #[cfg(test)]
 mod timefree_test {
-    use std::{fs, ops::Not, path::PathBuf, str::FromStr, sync::Arc};
-
-    use futures::pin_mut;
-    use radyko::app::hls::{ByteSize, StreamHandler};
+    use std::{ops::Not, path::PathBuf, str::FromStr, sync::Arc};
 
     use crate::common::tests_common::radiko_client;
 
@@ -54,26 +51,14 @@ mod timefree_test {
            end_time: 2026-04-26T05:00:00JST,
         */
 
-        let stream_medialist_urls = dummy_program
-            .stream_timefree_medialist_urls(Arc::clone(radiko_client))
-            .await;
-        pin_mut!(stream_medialist_urls);
-
-        let stream_handler = StreamHandler::new(reqwest::Client::new());
         let output_root_dir = PathBuf::from_str("./timefree_test")?;
-        std::fs::create_dir_all(&output_root_dir)?;
-        let downloaded_file_path = stream_handler
-            .download_timefree_program(
-                stream_medialist_urls,
-                dummy_program.output_dir(output_root_dir),
-                &dummy_program.output_filename(),
+        dummy_program
+            .download_timefree(
+                output_root_dir,
+                Arc::clone(&radiko_client),
+                reqwest::Client::new(),
             )
             .await?;
-        let file = fs::File::open(downloaded_file_path)?;
-        StreamHandler::verify_recorded_file(
-            ByteSize::from_bytes(file.metadata()?.len()),
-            dummy_program.on_air_duration_for_timefree(),
-        )?;
 
         Ok(())
     }

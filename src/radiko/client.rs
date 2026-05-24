@@ -82,10 +82,7 @@ impl app::ports::RadikoClient for RadikoClient {
     async fn now_on_air_programs(&self, area_id: Option<&str>) -> anyhow::Result<Vec<Program>> {
         let area_id = match area_id {
             Some(area_id) => area_id.to_string(),
-            None => {
-                let area_id = self.auth_state.read().await.area_id().to_string();
-                area_id
-            }
+            None => self.auth_state.read().await.area_id().to_string(),
         };
 
         Ok(self
