@@ -2,6 +2,7 @@ pub mod app;
 pub mod cli;
 pub mod commands;
 mod constants;
+pub mod infrastructure;
 pub mod radiko;
 pub mod telemetry;
 

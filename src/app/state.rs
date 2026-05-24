@@ -1,7 +1,5 @@
 use std::{
     collections::HashSet,
-    fs,
-    io::{BufWriter, Write},
     path::PathBuf,
     sync::{Arc, RwLock},
 };
@@ -13,7 +11,7 @@ use tracing::error;
 use crate::{
     app::{
         config::{RadykoConfig, RecordingConfig},
-        ports::RadikoClient,
+        ports::{RadikoClient, ReservedProgramRepository},
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
@@ -89,18 +87,19 @@ pub struct RecorderState {
     inner: RecorderStateRef,
 }
 
-#[derive(Debug)]
 struct RecorderStateRef {
     reserved_programs: Arc<RwLock<HashSet<ProgramId>>>,
-    reserved_state_file_path: PathBuf,
+    reserved_program_repository: Arc<dyn ReservedProgramRepository>,
 }
 
 impl RecorderState {
-    pub fn new(app_state: Arc<AppState>, reserved_state_file_path: PathBuf) -> Self {
-        let _ = fs::File::create_new(reserved_state_file_path.as_path());
+    pub fn new(
+        app_state: Arc<AppState>,
+        reserved_program_repository: Arc<dyn ReservedProgramRepository>,
+    ) -> Self {
         let inner = RecorderStateRef {
             reserved_programs: Arc::new(RwLock::new(HashSet::new())),
-            reserved_state_file_path,
+            reserved_program_repository,
         };
         Self { app_state, inner }
     }
@@ -109,6 +108,8 @@ impl RecorderState {
         let now = now.unwrap_or(Utils::now_in_tz_tokyo());
 
         Ok(self
+            .inner
+            .reserved_program_repository
             .get_reserved_program_ids()?
             .into_iter()
             .filter(|p| p.end_at().date() < now)
@@ -126,7 +127,11 @@ impl RecorderState {
             .filter(|program| reserved_programs_guard.insert(program.program_id()))
             .collect::<Vec<_>>();
 
-        if let Err(e) = self.append_reserved_program(&reserved_programs) {
+        if let Err(e) = self
+            .inner
+            .reserved_program_repository
+            .append_reserved_program(&reserved_programs)
+        {
             error!("add reserve program error: {:#?} ", e);
         }
 
@@ -139,7 +144,9 @@ impl RecorderState {
             .write()
             .expect("reserved_programs RwLock poisoned")
             .remove(&program_id);
-        self.delete_reserved_program(program_id)
+        self.inner
+            .reserved_program_repository
+            .delete_reserved_program(program_id)
     }
 
     pub fn reload_config(&self, config_path: PathBuf) -> anyhow::Result<()> {
@@ -175,48 +182,6 @@ impl RecorderState {
     pub fn schedule_update_interval_secs(&self) -> u64 {
         self.app_state.schedule_update_interval_secs()
     }
-
-    // TODO: ファイル読み書きしているところはRepositoryに抽象化した方が良さそう
-    fn get_reserved_program_ids(&self) -> anyhow::Result<Vec<ProgramId>> {
-        ProgramId::parse_from_string(fs::read_to_string(
-            self.inner.reserved_state_file_path.clone(),
-        )?)
-    }
-
-    fn append_reserved_program(&self, programs: &[Program]) -> anyhow::Result<()> {
-        let reserved_program_ids = ProgramId::parse_from_string(fs::read_to_string(
-            self.inner.reserved_state_file_path.as_path(),
-        )?)?;
-        let reserve_programs = programs
-            .iter()
-            .filter(|program| !reserved_program_ids.contains(&program.program_id()))
-            .collect::<Vec<_>>();
-
-        let mut file = BufWriter::new(
-            std::fs::File::options()
-                .create(true)
-                .append(true)
-                .open(self.inner.reserved_state_file_path.as_path())?,
-        );
-        for program in reserve_programs {
-            writeln!(file, "{} # {}", program.program_id(), program.info())?;
-        }
-        file.flush()?;
-
-        Ok(())
-    }
-
-    fn delete_reserved_program(&self, program_id: ProgramId) -> anyhow::Result<()> {
-        let reserved_programs = fs::read_to_string(self.inner.reserved_state_file_path.clone())?;
-        let filtered = reserved_programs
-            .lines()
-            .filter(|line| !line.contains(&program_id.to_string()))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        fs::write(self.inner.reserved_state_file_path.clone(), filtered)?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -228,6 +193,7 @@ mod tests {
     use crate::{
         RADYKO_TZ_NAME,
         app::state::{AppState, RecorderState},
+        infrastructure::new_file_reserved_repository,
         radiko::model::program::{EndAt, Program, ProgramId, RadykoDateTime, StartAt, StationId},
         test_helper::{load_example_config, radiko_client},
     };
@@ -239,7 +205,10 @@ mod tests {
     ) -> anyhow::Result<RecorderState> {
         let app_state =
             Arc::new(AppState::new(load_example_config()?, radiko_client().await.clone()).await?);
-        Ok(RecorderState::new(app_state, reserved_programs_file_path))
+        Ok(RecorderState::new(
+            app_state,
+            new_file_reserved_repository(reserved_programs_file_path),
+        ))
     }
 
     #[tokio::test]
@@ -266,13 +235,15 @@ mod tests {
         );
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&[program])?;
+        recorder_state.add_reserve_programs(vec![program]);
 
-        // 録音予約を全て取得
-        let all_reserved_program_ids = recorder_state.get_reserved_program_ids()?;
-        assert_eq!(all_reserved_program_ids.len(), 1);
+        // 過去（放送済み）の録音予約を全て取得
+        let aired_reserve_program_ids = recorder_state.collect_aired_program_ids(Some(
+            DateTime::strptime(DATETIME_FORMAT, "2100-01-01 00:00:00")?.in_tz(RADYKO_TZ_NAME)?,
+        ))?;
+        assert_eq!(aired_reserve_program_ids.len(), 1);
         assert_eq!(
-            *all_reserved_program_ids.first().unwrap().station_id(),
+            *aired_reserve_program_ids.first().unwrap().station_id(),
             StationId::new("LFR".to_string())
         );
 
@@ -319,13 +290,13 @@ mod tests {
         );
 
         // 録音予約を永続化(LFR)
-        recorder_state.append_reserved_program(&[program.clone()])?;
+        recorder_state.add_reserve_programs(vec![program.clone()]);
         let mut content = String::new();
         reserved_programs_file.read_to_string(&mut content)?;
         assert_eq!(ProgramId::parse_from_string(content)?.len(), 1);
 
         // 重複した予約情報は登録されない(LFR)
-        recorder_state.append_reserved_program(&[program.clone()])?;
+        recorder_state.add_reserve_programs(vec![program.clone()]);
         let mut content = String::new();
         reserved_programs_file
             .reopen()?

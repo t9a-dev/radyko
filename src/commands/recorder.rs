@@ -7,6 +7,7 @@ use crate::{
         utils::{self, Utils},
     },
     cli::RecorderArgs,
+    infrastructure::new_file_reserved_repository,
     radiko::model::program::{Program, Programs, RecordingDurationBuffers},
 };
 use futures::{StreamExt, stream::BoxStream};
@@ -26,7 +27,7 @@ pub async fn run(args: RecorderArgs) -> anyhow::Result<()> {
     let reserved_state_file_path = app_state.output_dir().join("reserved_programs");
     let recorder_state = Arc::new(RecorderState::new(
         Arc::clone(&app_state),
-        reserved_state_file_path,
+        new_file_reserved_repository(reserved_state_file_path),
     ));
     let mut reserve_schedule_update_interval = tokio::time::interval(
         tokio::time::Duration::from_secs(recorder_state.schedule_update_interval_secs()),
