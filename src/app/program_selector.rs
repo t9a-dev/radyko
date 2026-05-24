@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use anyhow::bail;
 use jiff::{Span, ToSpan, Zoned};
@@ -8,11 +8,10 @@ use tracing::warn;
 
 use crate::{
     app::{types::Station, utils::Utils},
-    radiko::{
-        RadikoClient,
-        model::program::{Program, Programs, RadykoDateTime, StartAt},
-    },
+    radiko::model::program::{Program, Programs, RadykoDateTime, StartAt},
 };
+
+use crate::app::ports::RadikoClient;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ScheduleError {
@@ -58,7 +57,7 @@ pub struct Keywords(Vec<String>);
 impl Keywords {
     async fn resolve_programs(
         self,
-        radiko_client: &RadikoClient,
+        radiko_client: Arc<dyn RadikoClient>,
         station: Station,
     ) -> anyhow::Result<Vec<Program>> {
         let mut programs = Vec::new();
@@ -109,7 +108,10 @@ impl ProgramSelector {
         }
     }
 
-    pub async fn resolve(self, radiko_client: &RadikoClient) -> anyhow::Result<Vec<Program>> {
+    pub async fn resolve(
+        self,
+        radiko_client: Arc<dyn RadikoClient>,
+    ) -> anyhow::Result<Vec<Program>> {
         match self.station {
             Station::Nationwide => match self.selector {
                 Selector::Keywords(keywords) => Ok(keywords

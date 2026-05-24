@@ -4,26 +4,25 @@ use tracing::{Instrument, error};
 
 use crate::{
     app::{
+        ports::RadikoClient,
         recording::{self},
         types::RecordingEvent,
     },
-    radiko::RadikoClient,
     radiko::model::program::{Program, RecordingDurationBuffers},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ProgramReserver {
     inner: Arc<ProgramReserverRef>,
 }
 
-#[derive(Debug)]
 struct ProgramReserverRef {
-    radiko_client: RadikoClient,
+    radiko_client: Arc<dyn RadikoClient>,
     output_root_dir: PathBuf,
 }
 
 impl ProgramReserver {
-    pub fn new(radiko_client: RadikoClient, output_root_dir: PathBuf) -> Self {
+    pub fn new(radiko_client: Arc<dyn RadikoClient>, output_root_dir: PathBuf) -> Self {
         Self {
             inner: Arc::new(ProgramReserverRef {
                 radiko_client,
@@ -45,21 +44,20 @@ impl ProgramReserver {
             async move {
                 let program = Arc::new(program);
                 program.wait_for_live_on_air(&buffer.start_buffer()).await;
-                let refreshed_radiko_client = match this.inner.radiko_client.refresh_auth().await {
-                    Ok(refreshed_client) => refreshed_client,
-                    Err(e) => {
-                        error!("failed refresh radiko client: {:#?}", e);
-                        // トークンのリフレッシュに失敗したら、そのまま現状のクライアントを使う
-                        this.inner.radiko_client.clone()
-                    }
-                };
+                let _ = this
+                    .inner
+                    .radiko_client
+                    .refresh_auth()
+                    .await
+                    .map_err(|e| error!("failed refresh auth radiko client: {e:#?}"));
+
                 if let Err(e) =
                     std::fs::create_dir_all(program.output_dir(this.inner.output_root_dir.clone()))
                 {
                     error!("create recording dir error: {:#?}", e)
                 };
                 match recording::start_for_live(
-                    &refreshed_radiko_client,
+                    Arc::clone(&this.inner.radiko_client),
                     Arc::clone(&program),
                     this.inner.output_root_dir.clone(),
                     &buffer,

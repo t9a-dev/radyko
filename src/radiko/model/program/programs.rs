@@ -1,18 +1,17 @@
-use std::{cmp::Reverse, collections::HashMap};
+use std::{cmp::Reverse, collections::HashMap, sync::Arc};
 
 use futures::{StreamExt, TryStreamExt, stream};
 
 use crate::{
     RADYKO_CONCURRENCY,
     app::program_selector::ProgramSelector,
+    radiko::dto::{json::RootJson, xml::RadikoProgramXml},
     radiko::model::program::{
         Program, ProgramParseError, RadykoDateTime, {ProgramId, StartAt},
     },
-    radiko::{
-        RadikoClient,
-        dto::{json::RootJson, xml::RadikoProgramXml},
-    },
 };
+
+use crate::app::ports::RadikoClient;
 
 #[derive(Debug, Clone)]
 pub struct Programs {
@@ -29,7 +28,7 @@ impl Programs {
     }
 
     pub async fn resolve_program_ids(
-        radiko_client: &RadikoClient,
+        radiko_client: Arc<dyn RadikoClient>,
         ids: Vec<ProgramId>,
     ) -> anyhow::Result<Vec<Program>> {
         let programs = stream::iter(ids)
@@ -50,11 +49,14 @@ impl Programs {
     }
 
     pub async fn resolve_selectors(
-        radiko_client: &RadikoClient,
+        radiko_client: Arc<dyn RadikoClient>,
         selectors: Vec<ProgramSelector>,
     ) -> anyhow::Result<Vec<Program>> {
         let mut programs = futures::stream::iter(selectors)
-            .map(|selector| async move { selector.resolve(radiko_client).await })
+            .map(|selector| {
+                let shared_radiko_client = Arc::clone(&radiko_client);
+                async move { selector.resolve(shared_radiko_client).await }
+            })
             .buffer_unordered(RADYKO_CONCURRENCY)
             .try_fold(Vec::new(), |mut result, programs| async move {
                 result.extend(programs);
@@ -67,7 +69,7 @@ impl Programs {
     }
 
     pub async fn start_time_to_programs(
-        radiko_client: &RadikoClient,
+        radiko_client: Arc<dyn RadikoClient>,
         station_id: &str,
     ) -> anyhow::Result<HashMap<StartAt, Program>> {
         Ok(radiko_client

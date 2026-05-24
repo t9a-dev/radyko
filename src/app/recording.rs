@@ -3,15 +3,12 @@ use std::{path::PathBuf, sync::Arc};
 use tracing::{info, trace};
 
 use crate::{
-    app::hls::StreamHandler,
-    radiko::{
-        RadikoClient,
-        model::program::{Program, RecordingDurationBuffers},
-    },
+    app::{hls::StreamHandler, ports::RadikoClient},
+    radiko::model::program::{Program, RecordingDurationBuffers},
 };
 
 pub async fn start_for_live(
-    radiko_client: &RadikoClient,
+    radiko_client: Arc<dyn RadikoClient>,
     program: Arc<Program>,
     output_root_dir: PathBuf,
     buffers: &RecordingDurationBuffers,

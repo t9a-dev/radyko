@@ -13,21 +13,27 @@ use tracing::error;
 use crate::{
     app::{
         config::{RadykoConfig, RecordingConfig},
+        ports::RadikoClient,
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
-    radiko::model::program::{Program, ProgramId, RadykoDateTime},
-    radiko::{RadikoClient, RadikoCredential},
+    radiko::{
+        RadikoCredential,
+        model::program::{Program, ProgramId, RadykoDateTime},
+        new_radiko_client,
+    },
 };
 
-#[derive(Debug)]
 pub struct AppState {
     config: Arc<RwLock<RadykoConfig>>,
-    radiko_client: RadikoClient,
+    radiko_client: Arc<dyn RadikoClient>,
 }
 
 impl AppState {
-    pub async fn new(config: RadykoConfig, radiko_client: RadikoClient) -> anyhow::Result<Self> {
+    pub async fn new(
+        config: RadykoConfig,
+        radiko_client: Arc<dyn RadikoClient>,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             config: Arc::new(RwLock::new(config)),
             radiko_client,
@@ -37,19 +43,19 @@ impl AppState {
     pub async fn build_from_recorder_args(args: RecorderArgs) -> anyhow::Result<Self> {
         let radyko_config = RadykoConfig::parse_from_path(args.config.config_path)?;
         let radiko_credential = RadikoCredential::load_from_env_file();
-        let radiko_client = RadikoClient::new(radiko_credential).await?;
+        let radiko_client = new_radiko_client(radiko_credential).await?;
         Self::new(radyko_config, radiko_client).await
     }
 
     pub async fn build_from_rule_args(args: RuleArgs) -> anyhow::Result<Self> {
         let radyko_config = RadykoConfig::parse_from_path(args.config.config_path)?;
         let radiko_credential = RadikoCredential::load_from_env_file();
-        let radiko_client = RadikoClient::new(radiko_credential).await?;
+        let radiko_client = new_radiko_client(radiko_credential).await?;
         Self::new(radyko_config, radiko_client).await
     }
 
-    pub fn radiko_client(&self) -> RadikoClient {
-        self.radiko_client.clone()
+    pub fn radiko_client(&self) -> Arc<dyn RadikoClient> {
+        Arc::clone(&self.radiko_client)
     }
 
     pub fn config(&self) -> Arc<RwLock<RadykoConfig>> {
@@ -78,7 +84,6 @@ impl AppState {
     }
 }
 
-#[derive(Debug)]
 pub struct RecorderState {
     app_state: Arc<AppState>,
     inner: RecorderStateRef,

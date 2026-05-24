@@ -1,11 +1,15 @@
+use std::sync::Arc;
+
 use crate::{
-    app::types::{Keyword, Station},
-    radiko::RadikoClient,
+    app::{
+        ports::RadikoClient,
+        types::{Keyword, Station},
+    },
     radiko::model::program::Programs,
 };
 
 pub async fn search_programs(
-    radiko_client: &RadikoClient,
+    radiko_client: Arc<dyn RadikoClient>,
     keyword: Keyword,
     station: Station,
 ) -> anyhow::Result<Programs> {
@@ -33,7 +37,7 @@ mod tests {
 
         assert!(
             search_programs(
-                radiko_client,
+                Arc::clone(&radiko_client),
                 Keyword::new("オールナイトニッポン".to_string()),
                 Station::Nationwide
             )
@@ -45,7 +49,7 @@ mod tests {
 
         assert!(
             search_programs(
-                radiko_client,
+                Arc::clone(&radiko_client),
                 Keyword::new("クラシック".to_string()),
                 Station::Id(TEST_STATION_ID.to_string())
             )

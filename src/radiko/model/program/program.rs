@@ -1,9 +1,12 @@
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use crate::radiko::{
-    dto::json::ProgramJson,
-    model::program::{
-        BufferSecs, RadykoDateTime, RecordingDurationBuffers, duration_buffer::StartBuffer,
+use crate::{
+    app::ports::RadikoClient,
+    radiko::{
+        dto::json::ProgramJson,
+        model::program::{
+            BufferSecs, RadykoDateTime, RecordingDurationBuffers, duration_buffer::StartBuffer,
+        },
     },
 };
 use futures::Stream;
@@ -14,10 +17,10 @@ use tracing::trace;
 use crate::{
     RADYKO_TZ_NAME,
     app::utils::Utils,
+    radiko::dto::xml::ProgramXml,
     radiko::model::program::{
         ProgramParseError, {EndAt, ProgramId, StartAt, StationId},
     },
-    radiko::{RadikoClient, dto::xml::ProgramXml},
 };
 
 #[derive(Debug, Clone)]
@@ -147,14 +150,14 @@ impl Program {
 
     pub async fn stream_timefree_medialist_urls(
         &self,
-        radiko_client: &RadikoClient,
+        radiko_client: Arc<dyn RadikoClient>,
     ) -> impl Stream<Item = anyhow::Result<String>> {
         radiko_client.stream_timefree_medialist_urls(self.program_id())
     }
 
     pub async fn media_list_url_for_live(
         &self,
-        radiko_client: &RadikoClient,
+        radiko_client: Arc<dyn RadikoClient>,
     ) -> anyhow::Result<String> {
         Ok(radiko_client
             .media_list_url_for_live(self.station_id().clone())

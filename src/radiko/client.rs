@@ -1,11 +1,12 @@
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use futures::Stream;
+use futures::{StreamExt, stream::BoxStream};
 use jiff::{ToSpan, Zoned};
 use reqwest::Client;
 
 use crate::{
-    app::utils::Utils,
+    app::{self, utils::Utils},
     radiko::{
         RadikoCredential,
         api::{
@@ -19,44 +20,46 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct RadikoClient {
-    default_area_id: Arc<String>,
+struct RadikoClient {
+    auth_state: Arc<RwLock<RadikoAuth>>,
     inner: Arc<RadikoClientRef>,
 }
 
 #[derive(Debug, Clone)]
 struct RadikoClientRef {
-    auth: RadikoAuth,
     stream: RadikoStream,
     program: RadikoProgram,
     search: RadikoSearch,
 }
 
-// TODO: 対応するインターフェースを作る オブジェクト設計スタイルガイド6章.5あたり
-impl RadikoClient {
-    pub async fn new(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
-        Self::init(credential).await
+// RadikoClientのnewメソッドのみを公開したいので、ファクトリメソッド経由で公開
+pub async fn new_radiko_client(
+    credential: Option<RadikoCredential>,
+) -> anyhow::Result<Arc<dyn crate::app::ports::RadikoClient>> {
+    Ok(Arc::new(RadikoClient::new(credential).await?))
+}
+
+#[async_trait::async_trait]
+impl app::ports::RadikoClient for RadikoClient {
+    async fn refresh_auth(&self) -> anyhow::Result<()> {
+        let refreshed_auth = self.auth_state.read().await.refresh_auth().await?;
+        {
+            let mut auth_state_guard = self.auth_state.write().await;
+            *auth_state_guard = refreshed_auth;
+        }
+
+        Ok(())
     }
 
-    pub async fn refresh_auth(&self) -> anyhow::Result<Self> {
-        let refreshed_auth = self.inner.auth.refresh_auth().await?;
-        let inner = Self::build_inner(refreshed_auth);
-
-        Ok(Self {
-            default_area_id: Arc::new(inner.auth.area_id().to_string()),
-            inner: Arc::new(inner),
-        })
+    async fn auth_token(&self) -> String {
+        self.auth_state.read().await.auth_token().to_string()
     }
 
-    pub async fn auth_token(&self) -> String {
-        self.inner.auth.auth_token().to_string()
+    async fn stream_url(&self, station_id: &str) -> String {
+        self.inner.stream.live_stream_url(station_id).await
     }
 
-    pub async fn stream_url(&self, station_id: &str) -> String {
-        self.inner.stream.live_stream_url(station_id)
-    }
-
-    pub async fn media_list_url_for_live(&self, station_id: StationId) -> anyhow::Result<String> {
+    async fn media_list_url_for_live(&self, station_id: StationId) -> anyhow::Result<String> {
         Ok(self
             .inner
             .stream
@@ -65,7 +68,7 @@ impl RadikoClient {
             .to_string())
     }
 
-    pub async fn media_list_url_for_timefree(
+    async fn media_list_url_for_timefree(
         &self,
         program_id: ProgramId,
         seek_start_at: SeekStartAt,
@@ -76,19 +79,26 @@ impl RadikoClient {
             .await
     }
 
-    pub async fn now_on_air_programs(&self, area_id: Option<&str>) -> anyhow::Result<Vec<Program>> {
-        let area_id = area_id.unwrap_or(&self.default_area_id);
+    async fn now_on_air_programs(&self, area_id: Option<&str>) -> anyhow::Result<Vec<Program>> {
+        let area_id = match area_id {
+            Some(area_id) => area_id.to_string(),
+            None => {
+                let area_id = self.auth_state.read().await.area_id().to_string();
+                area_id
+            }
+        };
+
         Ok(self
             .inner
             .program
-            .now_on_air_programs(area_id)
+            .now_on_air_programs(&area_id)
             .await?
             .to_vec()
             .into_iter()
             .collect::<Vec<_>>())
     }
 
-    pub async fn search_programs(
+    async fn search_programs(
         &self,
         keyword: String,
         station_id: Option<&str>,
@@ -102,7 +112,7 @@ impl RadikoClient {
         self.inner.search.search_programs(&condition).await
     }
 
-    pub async fn search_timefree_programs_with_keyword(
+    async fn search_timefree_programs_with_keyword(
         &self,
         keyword: String,
         station_id: Option<&str>,
@@ -127,14 +137,14 @@ impl RadikoClient {
         self.inner.search.search_programs(&condition).await
     }
 
-    pub async fn weekly_programs(&self, station_id: &str) -> anyhow::Result<Programs> {
+    async fn weekly_programs(&self, station_id: &str) -> anyhow::Result<Programs> {
         self.inner
             .program
             .weekly_programs_by_station(station_id)
             .await
     }
 
-    pub async fn find_program(
+    async fn find_program(
         &self,
         start_at: &StartAt,
         station_id: &StationId,
@@ -142,34 +152,45 @@ impl RadikoClient {
         self.inner.program.find_program(station_id, start_at).await
     }
 
-    pub fn stream_timefree_medialist_urls(
+    fn stream_timefree_medialist_urls(
         &self,
         program_id: ProgramId,
-    ) -> impl Stream<Item = anyhow::Result<String>> {
-        self.inner.stream.stream_timefree_medialist_urls(program_id)
+    ) -> BoxStream<'static, anyhow::Result<String>> {
+        self.inner
+            .stream
+            .clone()
+            .stream_timefree_medialist_urls(program_id)
+            .boxed()
+    }
+}
+
+impl RadikoClient {
+    async fn new(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
+        Self::init(credential).await
     }
 
     async fn init(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
-        let inner = Self::init_inner(credential).await?;
+        let shared_radiko_auth_state =
+            Arc::new(tokio::sync::RwLock::new(RadikoAuth::new(credential).await?));
+        let inner = Self::init_inner(Arc::clone(&shared_radiko_auth_state)).await?;
 
         Ok(Self {
-            default_area_id: Arc::new(inner.auth.area_id().to_string()),
+            auth_state: Arc::clone(&shared_radiko_auth_state),
             inner: Arc::new(inner),
         })
     }
 
-    async fn init_inner(credential: Option<RadikoCredential>) -> anyhow::Result<RadikoClientRef> {
-        let radiko_auth = RadikoAuth::new(credential).await;
-
-        Ok(Self::build_inner(radiko_auth?))
+    async fn init_inner(
+        radiko_auth_state: Arc<RwLock<RadikoAuth>>,
+    ) -> anyhow::Result<RadikoClientRef> {
+        Ok(Self::build_inner(radiko_auth_state))
     }
 
-    fn build_inner(radiko_auth: RadikoAuth) -> RadikoClientRef {
+    fn build_inner(radiko_auth_state: Arc<RwLock<RadikoAuth>>) -> RadikoClientRef {
         let client = Client::new();
 
         RadikoClientRef {
-            auth: radiko_auth.clone(),
-            stream: RadikoStream::new(radiko_auth.clone()),
+            stream: RadikoStream::new(radiko_auth_state),
             program: RadikoProgram::new(client.clone()),
             search: RadikoSearch::new(client.clone()),
         }
@@ -179,6 +200,20 @@ impl RadikoClient {
 #[cfg(test)]
 mod tests {
     use crate::test_helper::radiko_client;
+
+    #[tokio::test]
+    #[ignore = "radiko apiに依存"]
+    async fn refresh_auth_test() -> anyhow::Result<()> {
+        let radiko_client = radiko_client().await;
+        let previous_auth_token = radiko_client.auth_token().await.to_string();
+
+        radiko_client.refresh_auth().await?;
+        let refreshed_auth_token = radiko_client.auth_token().await.to_string();
+
+        assert_ne!(previous_auth_token, refreshed_auth_token);
+
+        Ok(())
+    }
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]

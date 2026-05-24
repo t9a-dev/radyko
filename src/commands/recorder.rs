@@ -62,7 +62,7 @@ async fn reserve(
         .expect("recorder_state config RwLock poisoned")
         .collect_program_selectors()?;
     let programs = Programs::resolve_selectors(
-        &recorder_state.app_state().radiko_client(),
+        recorder_state.app_state().radiko_client(),
         program_selectors,
     )
     .await?;
@@ -96,21 +96,25 @@ async fn reserve(
 
 async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
     let program_ids = recorder_state.collect_aired_program_ids(None)?;
-    let radiko_client = &recorder_state.app_state().radiko_client();
+    let radiko_client = recorder_state.app_state().radiko_client();
     let timefree_programs = Programs::resolve_program_ids(radiko_client, program_ids).await?;
     if timefree_programs.is_empty() {
         info!("timefree programs empty");
         return Ok(());
     }
 
-    let radiko_client = recorder_state
-        .app_state()
-        .radiko_client()
-        .refresh_auth()
-        .await?;
     let stream_handler = StreamHandler::new(reqwest::Client::new());
     for program in timefree_programs {
-        let stream_media_list_urls = program.stream_timefree_medialist_urls(&radiko_client).await;
+        recorder_state
+            .app_state()
+            .radiko_client()
+            .refresh_auth()
+            .await?;
+
+        let shared_radiko_client = Arc::clone(&recorder_state.app_state().radiko_client());
+        let stream_media_list_urls = program
+            .stream_timefree_medialist_urls(shared_radiko_client)
+            .await;
         let recorded_file_path = stream_handler
             .download_timefree_program(
                 stream_media_list_urls,

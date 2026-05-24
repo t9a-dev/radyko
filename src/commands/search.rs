@@ -2,11 +2,11 @@ use std::io::{self, BufWriter, Write};
 
 use tracing::error;
 
-use crate::{cli::SearchArgs, radiko::RadikoClient};
+use crate::{cli::SearchArgs, radiko::new_radiko_client};
 
 #[tracing::instrument(name = "cli_command_search")]
 pub async fn run(args: SearchArgs) -> anyhow::Result<()> {
-    let radiko_client = RadikoClient::new(None).await?;
+    let radiko_client = new_radiko_client(None).await?;
     let programs = radiko_client
         .search_programs(args.keyword, args.station_id.as_deref())
         .await?

@@ -2,7 +2,7 @@ mod common;
 
 #[cfg(test)]
 mod resolve_programs_test {
-    use std::{collections::HashMap, ops::Not};
+    use std::{collections::HashMap, ops::Not, sync::Arc};
 
     use crate::common::tests_common::{TEST_STATION_ID, radiko_client};
     use radyko::{
@@ -24,7 +24,8 @@ mod resolve_programs_test {
             vec!["オールナイトニッポン".to_string()],
         );
         let program_selectors = RadykoConfigKeywords::new(keywords).into_program_selectors();
-        let result = Programs::resolve_selectors(radiko_client, program_selectors).await?;
+        let result =
+            Programs::resolve_selectors(Arc::clone(radiko_client), program_selectors).await?;
 
         assert!(result.is_empty().not());
         println!("resolve keyword programs: {:#?}", result);
@@ -41,7 +42,8 @@ mod resolve_programs_test {
             vec!["* * * * * *".to_string()],
         )]);
         let program_selectors = RadykoConfigRules::new(rules).try_into_program_selectors(None)?;
-        let result = Programs::resolve_selectors(radiko_client, program_selectors).await?;
+        let result =
+            Programs::resolve_selectors(Arc::clone(radiko_client), program_selectors).await?;
 
         assert!(result.is_empty().not());
         println!("resolve rule programs: {:#?}", result);

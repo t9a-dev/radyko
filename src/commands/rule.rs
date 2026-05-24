@@ -22,7 +22,7 @@ pub async fn run(args: RuleArgs) -> anyhow::Result<()> {
         .expect("app_state config RwLock poisoned")
         .collect_program_selectors()?;
     let programs =
-        Programs::resolve_selectors(&app_state.radiko_client(), program_selectors).await?;
+        Programs::resolve_selectors(app_state.radiko_client(), program_selectors).await?;
 
     // println!(): programsをforで回しながらprintln!()するとprintln!()のたびにstdioをロックする。
     // writeln!(): 一度stdioをロックして、出力内容をbufferに書き溜めて最後に一度表示する方法が効率が良い。

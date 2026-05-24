@@ -11,7 +11,10 @@ pub const RADYKO_CONCURRENCY: usize = 2;
 #[cfg(test)]
 pub mod test_helper {
 
-    use std::io::{BufReader, Cursor};
+    use std::{
+        io::{BufReader, Cursor},
+        sync::Arc,
+    };
 
     use anyhow::Context;
     use jiff::{Zoned, civil::DateTime};
@@ -20,13 +23,16 @@ pub mod test_helper {
 
     use crate::{
         RADYKO_TZ_NAME,
-        app::config::{self, RadykoConfig},
-        radiko::{RadikoClient, RadikoCredential},
+        app::{
+            config::{self, RadykoConfig},
+            ports::RadikoClient,
+        },
+        radiko::{RadikoCredential, new_radiko_client},
     };
 
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
-    static RADIKO_CLIENT: sync::OnceCell<RadikoClient> = OnceCell::const_new();
-    static AREA_FREE_RADIKO_CLIENT: sync::OnceCell<RadikoClient> = OnceCell::const_new();
+    static RADIKO_CLIENT: sync::OnceCell<Arc<dyn RadikoClient>> = OnceCell::const_new();
+    static AREA_FREE_RADIKO_CLIENT: sync::OnceCell<Arc<dyn RadikoClient>> = OnceCell::const_new();
 
     pub fn reqwest_client() -> &'static reqwest::Client {
         CLIENT.get_or_init(Client::new)
@@ -39,17 +45,17 @@ pub mod test_helper {
         RadykoConfig::parse(reader)
     }
 
-    pub async fn radiko_client() -> &'static RadikoClient {
+    pub async fn radiko_client() -> &'static Arc<dyn RadikoClient> {
         RADIKO_CLIENT
-            .get_or_init(|| async { RadikoClient::new(None).await.unwrap() })
+            .get_or_init(|| async { new_radiko_client(None).await.unwrap() })
             .await
     }
 
-    pub async fn area_free_radiko_client() -> &'static RadikoClient {
+    pub async fn area_free_radiko_client() -> &'static Arc<dyn RadikoClient> {
         AREA_FREE_RADIKO_CLIENT
             .get_or_init(|| async {
                 let credential = RadikoCredential::load_from_env_file().unwrap();
-                RadikoClient::new(Some(credential)).await.unwrap()
+                new_radiko_client(Some(credential)).await.unwrap()
             })
             .await
     }

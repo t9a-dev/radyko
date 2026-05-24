@@ -2,7 +2,7 @@ mod common;
 
 #[cfg(test)]
 mod timefree_test {
-    use std::{fs, ops::Not, path::PathBuf, str::FromStr};
+    use std::{fs, ops::Not, path::PathBuf, str::FromStr, sync::Arc};
 
     use futures::pin_mut;
     use radyko::app::hls::{ByteSize, StreamHandler};
@@ -55,7 +55,7 @@ mod timefree_test {
         */
 
         let stream_medialist_urls = dummy_program
-            .stream_timefree_medialist_urls(radiko_client)
+            .stream_timefree_medialist_urls(Arc::clone(radiko_client))
             .await;
         pin_mut!(stream_medialist_urls);
 

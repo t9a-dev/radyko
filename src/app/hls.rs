@@ -453,7 +453,9 @@ mod tests {
         let now_on_air_programs = radiko_client.now_on_air_programs(None).await?;
         let program = now_on_air_programs.first().unwrap();
 
-        let media_list_url = program.media_list_url_for_live(radiko_client).await?;
+        let media_list_url = program
+            .media_list_url_for_live(Arc::clone(&radiko_client))
+            .await?;
         let temp_dir = TempDir::new_in(".")?;
         let stream_handler = Arc::new(StreamHandler::new(Client::new()));
         if let Err(e) = stream_handler

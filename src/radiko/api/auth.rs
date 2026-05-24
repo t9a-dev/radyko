@@ -182,8 +182,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "エリアフリー会員情報を持つことに依存しているテスト"]
     async fn init_area_free_client_smoke() -> Result<()> {
-        let auth_manager = radiko_auth(AuthType::AreaFree).await;
-        assert!(auth_manager.area_free());
+        let auth_state = radiko_auth(AuthType::AreaFree).await;
+        assert!(auth_state.read().await.area_free());
 
         Ok(())
     }
@@ -191,8 +191,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn init_not_area_free_client_smoke() -> Result<()> {
-        let auth_manager = radiko_auth(AuthType::Normal).await;
-        assert!(!auth_manager.area_free());
+        let auth_state = radiko_auth(AuthType::Normal).await;
+        assert!(!auth_state.read().await.area_free());
 
         Ok(())
     }
@@ -200,13 +200,13 @@ mod tests {
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn refresh_auth_test() -> Result<()> {
-        let auth_manager = radiko_auth(AuthType::Normal).await;
-        let refreshed_auth_manager = auth_manager.refresh_auth().await?;
+        let auth_state = radiko_auth(AuthType::Normal).await;
+        let previous_token = auth_state.read().await.auth_token().to_string();
 
-        assert_ne!(
-            auth_manager.auth_token(),
-            refreshed_auth_manager.auth_token()
-        );
+        let refreshed_auth_state = auth_state.read().await.refresh_auth().await?;
+        let refreshed_token = refreshed_auth_state.auth_token().to_string();
+
+        assert_ne!(previous_token, refreshed_token);
 
         Ok(())
     }

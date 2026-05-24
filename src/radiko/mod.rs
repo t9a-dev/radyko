@@ -4,12 +4,15 @@ mod credential;
 mod dto;
 pub mod model;
 
-pub use client::RadikoClient;
+pub use client::new_radiko_client;
 pub use credential::RadikoCredential;
 
 #[cfg(test)]
 mod test_helper {
+    use std::sync::Arc;
+
     use reqwest::Client;
+    use tokio::sync::RwLock;
 
     use crate::radiko::{
         RadikoCredential,
@@ -25,8 +28,9 @@ mod test_helper {
     }
 
     // tokio::sync
-    static RADIKO_AUTH: tokio::sync::OnceCell<RadikoAuth> = tokio::sync::OnceCell::const_new();
-    static RADIKO_AUTH_AREA_FREE: tokio::sync::OnceCell<RadikoAuth> =
+    static RADIKO_AUTH: tokio::sync::OnceCell<Arc<RwLock<RadikoAuth>>> =
+        tokio::sync::OnceCell::const_new();
+    static RADIKO_AUTH_AREA_FREE: tokio::sync::OnceCell<Arc<RwLock<RadikoAuth>>> =
         tokio::sync::OnceCell::const_new();
     static RADIKO_STREAM: tokio::sync::OnceCell<RadikoStream> = tokio::sync::OnceCell::const_new();
     // std::sync
@@ -39,18 +43,20 @@ mod test_helper {
         CLIENT.get_or_init(Client::new)
     }
 
-    pub async fn radiko_auth(auth_type: AuthType) -> &'static RadikoAuth {
+    pub async fn radiko_auth(auth_type: AuthType) -> &'static Arc<RwLock<RadikoAuth>> {
         match auth_type {
             AuthType::Normal => {
                 RADIKO_AUTH
-                    .get_or_init(|| async { RadikoAuth::new(None).await.unwrap() })
+                    .get_or_init(|| async {
+                        Arc::new(RwLock::new(RadikoAuth::new(None).await.unwrap()))
+                    })
                     .await
             }
             AuthType::AreaFree => {
                 RADIKO_AUTH_AREA_FREE
                     .get_or_init(|| async {
                         let credential = RadikoCredential::load_from_env_file();
-                        RadikoAuth::new(credential).await.unwrap()
+                        Arc::new(RwLock::new(RadikoAuth::new(credential).await.unwrap()))
                     })
                     .await
             }

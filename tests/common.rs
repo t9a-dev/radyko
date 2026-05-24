@@ -4,9 +4,12 @@
 pub mod tests_common {
     use std::io::BufReader;
     use std::io::Cursor;
+    use std::sync::Arc;
 
     use radyko::app::config;
-    use radyko::{app::config::RadykoConfig, radiko::RadikoClient};
+    use radyko::app::config::RadykoConfig;
+    use radyko::app::ports::RadikoClient;
+    use radyko::radiko::new_radiko_client;
     use tokio::sync::OnceCell;
 
     /// Tokyo
@@ -15,7 +18,7 @@ pub mod tests_common {
     pub const TEST_EMPTY_KEYWORDS_CONFIG_PATH: &str = "tests/fixtures/empty_keywords_radyko.toml";
     pub const TEST_EMPTY_RULES_CONFIG_PATH: &str = "tests/fixtures/empty_rules_radyko.toml";
 
-    static RADIKO_CLIENT: tokio::sync::OnceCell<RadikoClient> = OnceCell::const_new();
+    static RADIKO_CLIENT: tokio::sync::OnceCell<Arc<dyn RadikoClient>> = OnceCell::const_new();
 
     pub fn load_example_config() -> anyhow::Result<RadykoConfig> {
         let cursor = Cursor::new(config::EXAMPLE_CONFIG);
@@ -24,9 +27,9 @@ pub mod tests_common {
         RadykoConfig::parse(reader)
     }
 
-    pub async fn radiko_client() -> &'static RadikoClient {
+    pub async fn radiko_client() -> &'static Arc<dyn RadikoClient> {
         RADIKO_CLIENT
-            .get_or_init(|| async { RadikoClient::new(None).await.unwrap() })
+            .get_or_init(|| async { new_radiko_client(None).await.unwrap() })
             .await
     }
 }

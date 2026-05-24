@@ -1,7 +1,8 @@
 use std::{borrow::Cow, convert::TryFrom, io::Write, sync::Arc};
+use tokio::sync::RwLock;
 
 use anyhow::{Context, anyhow, bail};
-use futures::{Stream, StreamExt};
+use futures::{StreamExt, stream::BoxStream};
 use hls_m3u8::MasterPlaylist;
 use tempfile::NamedTempFile;
 
@@ -19,19 +20,19 @@ pub struct RadikoStream {
 
 #[derive(Debug)]
 struct RadikoStreamRef {
-    radiko_auth: RadikoAuth,
+    radiko_auth: Arc<RwLock<RadikoAuth>>,
 }
 
 impl RadikoStream {
-    pub fn new(radiko_auth: RadikoAuth) -> Self {
+    pub fn new(radiko_auth: Arc<RwLock<RadikoAuth>>) -> Self {
         Self {
             inner: Arc::new(RadikoStreamRef { radiko_auth }),
         }
     }
 
-    pub fn live_stream_url(&self, station_id: &str) -> String {
-        let lsid = &self.inner.radiko_auth.lsid().to_string();
-        if self.inner.radiko_auth.area_free() {
+    pub async fn live_stream_url(&self, station_id: &str) -> String {
+        let lsid = &self.inner.radiko_auth.read().await.lsid().to_string();
+        if self.inner.radiko_auth.read().await.area_free() {
             Endpoint::area_free_playlist_create_url_endpoint(station_id, lsid)
         } else {
             Endpoint::playlist_create_url_endpoint(station_id, lsid)
@@ -67,9 +68,9 @@ impl RadikoStream {
 
     /// medialist urlからタイムフリー音声配信URLを非同期に取得する
     pub fn stream_timefree_medialist_urls(
-        &self,
+        self,
         program_id: ProgramId,
-    ) -> impl Stream<Item = anyhow::Result<String>> {
+    ) -> BoxStream<'static, anyhow::Result<String>> {
         let seek_times = SeekStartAt::calculate_seek_start_times(
             program_id.start_at().clone(),
             program_id.end_at().clone(),
@@ -86,6 +87,7 @@ impl RadikoStream {
                 }
             })
             .buffer_unordered(RADYKO_CONCURRENCY)
+            .boxed()
     }
 
     pub async fn download_playlist_to_tempfile(
@@ -95,8 +97,10 @@ impl RadikoStream {
         let playlist_content = self
             .inner
             .radiko_auth
+            .read()
+            .await
             .http_client()
-            .get(self.live_stream_url(station_id))
+            .get(self.live_stream_url(station_id).await)
             .send()
             .await?
             .bytes()
@@ -117,8 +121,10 @@ impl RadikoStream {
         let master_playlist_res = self
             .inner
             .radiko_auth
+            .read()
+            .await
             .http_client()
-            .get(self.timefree_stream_url(program_id, seek_start_at))
+            .get(self.timefree_stream_url(program_id, seek_start_at).await)
             .send()
             .await?;
 
@@ -126,7 +132,7 @@ impl RadikoStream {
             return Err(anyhow!(
                 "get hls master playlist error: {:#?}, client_info: {:#?}",
                 master_playlist_res.text().await?,
-                self.inner.radiko_auth.http_client()
+                self.inner.radiko_auth.read().await.http_client()
             ));
         }
 
@@ -157,8 +163,10 @@ impl RadikoStream {
         let master_playlist_res = self
             .inner
             .radiko_auth
+            .read()
+            .await
             .http_client()
-            .get(self.live_stream_url(station_id))
+            .get(self.live_stream_url(station_id).await)
             .send()
             .await?;
 
@@ -166,16 +174,20 @@ impl RadikoStream {
             return Err(anyhow!(
                 "get hls master playlist error: {:#?}, client_info: {:#?}",
                 master_playlist_res.text().await?,
-                self.inner.radiko_auth.http_client()
+                self.inner.radiko_auth.read().await.http_client()
             ));
         }
 
         Ok(master_playlist_res.text().await?.into())
     }
 
-    fn timefree_stream_url(&self, program_id: ProgramId, seek_start_at: SeekStartAt) -> String {
-        let lsid = &self.inner.radiko_auth.lsid().to_string();
-        if self.inner.radiko_auth.area_free() {
+    async fn timefree_stream_url(
+        &self,
+        program_id: ProgramId,
+        seek_start_at: SeekStartAt,
+    ) -> String {
+        let lsid = &self.inner.radiko_auth.read().await.lsid().to_string();
+        if self.inner.radiko_auth.read().await.area_free() {
             Endpoint::timefree_for_area_free_playlist_create_url_endpoint(
                 &program_id,
                 &seek_start_at,
@@ -216,7 +228,13 @@ mod tests {
                 .is_empty()
                 .not()
         );
-        assert!(radiko_stream.live_stream_url(station_id).is_empty().not());
+        assert!(
+            radiko_stream
+                .live_stream_url(station_id)
+                .await
+                .is_empty()
+                .not()
+        );
 
         let mut playlist_file = radiko_stream
             .download_playlist_to_tempfile(station_id)
@@ -248,6 +266,7 @@ mod tests {
         assert!(
             radiko_stream
                 .live_stream_url(TEST_STATION_ID)
+                .await
                 .is_empty()
                 .not()
         );
