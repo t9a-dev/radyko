@@ -55,7 +55,7 @@ mod timefree_test {
         dummy_program
             .download_timefree(
                 output_root_dir,
-                Arc::clone(&radiko_client),
+                Arc::clone(radiko_client),
                 reqwest::Client::new(),
             )
             .await?;

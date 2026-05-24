@@ -62,7 +62,7 @@ mod recording_program_test {
 
         // バックグラウンドで録音処理が実行される時間待機
         // 録音処理でエラーが発生しないことのみを検証
-        tokio::time::sleep(Duration::from_secs(recording_duration_secs as u64)).await;
+        tokio::time::sleep(Duration::from_secs(recording_duration_secs)).await;
 
         Ok(())
     }

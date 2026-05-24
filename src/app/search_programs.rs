@@ -37,7 +37,7 @@ mod tests {
 
         assert!(
             search_programs(
-                Arc::clone(&radiko_client),
+                Arc::clone(radiko_client),
                 Keyword::new("オールナイトニッポン".to_string()),
                 Station::Nationwide
             )
@@ -49,7 +49,7 @@ mod tests {
 
         assert!(
             search_programs(
-                Arc::clone(&radiko_client),
+                Arc::clone(radiko_client),
                 Keyword::new("クラシック".to_string()),
                 Station::Id(TEST_STATION_ID.to_string())
             )
