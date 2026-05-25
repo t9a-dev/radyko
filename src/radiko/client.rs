@@ -6,16 +6,13 @@ use jiff::{ToSpan, Zoned};
 use reqwest::Client;
 
 use crate::{
-    app::{self, utils::Utils},
-    radiko::{
-        RadikoCredential,
-        api::{
-            auth::RadikoAuth,
-            program::RadikoProgram,
-            search::{Filter, RadikoSearch, RadikoSearchCondition},
-            stream::RadikoStream,
-        },
-        model::program::{Program, ProgramId, Programs, SeekStartAt, StartAt, StationId},
+    app::{self, credential::RadikoCredential, utils::Utils},
+    domain::program::{Program, ProgramId, Programs, SeekStartAt, StartAt, StationId},
+    radiko::api::{
+        auth::RadikoAuth,
+        program::RadikoProgram,
+        search::{Filter, RadikoSearch, RadikoSearchCondition},
+        stream::RadikoStream,
     },
 };
 

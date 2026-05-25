@@ -1,6 +1,6 @@
 use jiff::Zoned;
 
-use crate::radiko::model::program::{ProgramId, RadykoDateTime, SeekStartAt};
+use crate::domain::program::{ProgramId, RadykoDateTime, SeekStartAt};
 
 const V2_URL: &str = "https://radiko.jp/v2/";
 const V3_URL: &str = "https://radiko.jp/v3/";
@@ -39,10 +39,12 @@ impl Endpoint {
         format!("{}api/program/search", V3_URL)
     }
 
+    #[allow(dead_code)]
     pub fn station_list_from_area_id_endpoint(area_id: &str) -> String {
         format!("{}station/list/{}.xml", V3_URL, area_id)
     }
 
+    #[allow(dead_code)]
     pub fn station_list_all_endpoint() -> String {
         format!("{}station/region/full.xml", V3_URL)
     }
@@ -59,6 +61,7 @@ impl Endpoint {
     /// weekly_programs_endpoint の利用を推奨
     // radiko apiの仕様で深夜3時から始まる番組は前日の番組表にしか含まれないので注意
     // 2026/01/15/03:00~の番組情報は2026/01/15の番組表には含まれず2026/01/14の番組表に含まれる
+    #[allow(dead_code)]
     pub fn date_programs_endpoint(station_id: &str, date: Zoned) -> String {
         format!(
             "{}program/v3/date/{}/station/{}.xml",
@@ -186,10 +189,8 @@ mod tests {
     use crate::{
         RADYKO_TZ_NAME,
         constants::test_constants::TEST_STATION_ID,
+        domain::program::{EndAt, ProgramId, RadykoDateTime, SeekStartAt, StartAt, StationId},
         radiko::api::utils::Utils,
-        radiko::model::program::{
-            EndAt, ProgramId, RadykoDateTime, SeekStartAt, StartAt, StationId,
-        },
     };
 
     #[test]

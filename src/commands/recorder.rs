@@ -7,8 +7,8 @@ use crate::{
         utils::{self, Utils},
     },
     cli::RecorderArgs,
+    domain::program::{Program, Programs, RecordingDurationBuffers},
     infrastructure::new_file_reserved_repository,
-    radiko::model::program::{Program, Programs, RecordingDurationBuffers},
 };
 use futures::{StreamExt, stream::BoxStream};
 use std::{

@@ -1,5 +1,6 @@
 pub mod audio_segments;
 pub mod config;
+pub mod credential;
 pub mod hls;
 pub mod ports;
 pub mod program_reserver;

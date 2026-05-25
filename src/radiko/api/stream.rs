@@ -8,7 +8,7 @@ use tempfile::NamedTempFile;
 
 use crate::{
     RADYKO_CONCURRENCY,
-    radiko::model::program::{ProgramId, SeekStartAt},
+    domain::program::{ProgramId, SeekStartAt},
 };
 
 use super::{auth::RadikoAuth, endpoint::Endpoint};
@@ -90,6 +90,7 @@ impl RadikoStream {
             .boxed()
     }
 
+    #[allow(dead_code)]
     pub async fn download_playlist_to_tempfile(
         &self,
         station_id: &str,

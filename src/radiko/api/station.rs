@@ -4,13 +4,13 @@ use anyhow::Result;
 use reqwest::Client;
 
 use crate::{
-    radiko::model::{
+    domain::{
         region::{Region, RegionStations},
         station::Stations,
     },
     radiko::{
         api::endpoint::Endpoint,
-        dto::xml::{RegionXml, StationsXml},
+        dto::xml::{region_xml::RegionXml, station_xml::StationsXml},
     },
 };
 

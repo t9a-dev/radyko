@@ -10,7 +10,7 @@ mod recording_program_test {
             program_reserver::ProgramReserver,
             utils::Utils,
         },
-        radiko::model::program::{
+        domain::program::{
             Program, RadykoDateTime, RecordingDurationBuffers, {EndAt, ProgramId, StartAt},
         },
         telemetry::init_telemetry,

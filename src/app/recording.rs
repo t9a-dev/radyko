@@ -4,7 +4,7 @@ use tracing::{info, trace};
 
 use crate::{
     app::{hls::StreamHandler, ports::RadikoClient},
-    radiko::model::program::{Program, RecordingDurationBuffers},
+    domain::program::{Program, RecordingDurationBuffers},
 };
 
 pub async fn start_for_live(

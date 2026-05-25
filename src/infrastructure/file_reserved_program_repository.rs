@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     app::ports,
-    radiko::model::program::{Program, ProgramId},
+    domain::program::{Program, ProgramId},
 };
 
 pub fn new_file_reserved_repository(
@@ -24,11 +24,11 @@ struct FileReservedProgramRepository {
 }
 
 impl ports::ReservedProgramRepository for FileReservedProgramRepository {
-    fn get_reserved_program_ids(&self) -> anyhow::Result<Vec<ProgramId>> {
+    fn reserved_program_ids(&self) -> anyhow::Result<Vec<ProgramId>> {
         ProgramId::parse_from_string(fs::read_to_string(self.reserved_state_file_path.clone())?)
     }
 
-    fn append_reserved_program(&self, programs: &[Program]) -> anyhow::Result<()> {
+    fn save_reserved_programs(&self, programs: &[Program]) -> anyhow::Result<()> {
         let reserved_program_ids = ProgramId::parse_from_string(fs::read_to_string(
             self.reserved_state_file_path.as_path(),
         )?)?;

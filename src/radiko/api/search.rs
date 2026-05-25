@@ -4,8 +4,8 @@ use strum_macros::{AsRefStr, Display};
 use thiserror::Error;
 
 use crate::{
-    radiko::model::program::Programs,
-    radiko::{api::endpoint::Endpoint, dto::json::RootJson},
+    domain::program::Programs,
+    radiko::{api::endpoint::Endpoint, dto::json::program_json::RootJson},
 };
 use anyhow::{Context, Result};
 

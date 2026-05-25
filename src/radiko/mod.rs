@@ -1,11 +1,9 @@
 mod api;
 mod client;
-mod credential;
 mod dto;
-pub mod model;
+mod mapper;
 
 pub use client::new_radiko_client;
-pub use credential::RadikoCredential;
 
 #[cfg(test)]
 mod test_helper {
@@ -14,12 +12,10 @@ mod test_helper {
     use reqwest::Client;
     use tokio::sync::RwLock;
 
-    use crate::radiko::{
-        RadikoCredential,
-        api::{
-            auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
-            stream::RadikoStream,
-        },
+    use crate::app::credential::RadikoCredential;
+    use crate::radiko::api::{
+        auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
+        stream::RadikoStream,
     };
 
     pub enum AuthType {

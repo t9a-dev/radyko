@@ -1,37 +1,10 @@
-use serde_derive::Deserialize;
-
-use crate::radiko::dto::xml::{RegionStationXml, RegionStationsXml, RegionXml};
-
-use super::logo::Logo;
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Region {
-    pub stations_groups: Vec<RegionStations>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct RegionStations {
-    pub ascii_name: String,
-    pub region_id: String,
-    pub region_name: String,
-    pub stations: Vec<RegionStation>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct RegionStation {
-    pub id: String,
-    pub name: String,
-    pub ascii_name: String,
-    pub ruby: String,
-    pub areafree: u8,
-    pub timefree: u8,
-    pub logos: Vec<Logo>,
-    pub tf_max_delay: u32,
-    pub banner: String,
-    pub area_id: String,
-    pub href: String,
-    pub simul_max_delay: u32,
-}
+use crate::{
+    domain::{
+        Logo,
+        region::{Region, RegionStation, RegionStations},
+    },
+    radiko::dto::xml::region_xml::{RegionStationXml, RegionStationsXml, RegionXml},
+};
 
 impl From<RegionXml> for Region {
     fn from(value: RegionXml) -> Self {

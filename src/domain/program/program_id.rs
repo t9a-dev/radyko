@@ -5,7 +5,7 @@ use jiff::{ToSpan, Zoned, civil::DateTime};
 use serde::Deserialize;
 use tracing::error;
 
-use crate::{RADYKO_TZ_NAME, radiko::model::program::jst_datetime};
+use crate::RADYKO_TZ_NAME;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Deserialize)]
 /// 番組情報が一意になる値を返す。録音予約済み判定に利用。
@@ -85,19 +85,15 @@ pub trait RadykoDateTime {
         Self: Sized,
     {
         Ok(Self::new(
-            DateTime::strptime(Self::format_str(), s)
+            DateTime::strptime(RadykoDateTimeDisplay::<Self>::FORMAT_STR, s)
                 .with_context(|| {
                     format!(
                         "failed string to datetime. str: {s}, format: {}",
-                        Self::format_str()
+                        RadykoDateTimeDisplay::<Self>::FORMAT_STR
                     )
                 })?
                 .in_tz(RADYKO_TZ_NAME)?,
         ))
-    }
-
-    fn format_str() -> &'static str {
-        "%Y%m%d%H%M%S"
     }
 
     fn date(&self) -> Zoned;
@@ -117,9 +113,13 @@ pub trait RadykoDateTime {
 
 pub struct RadykoDateTimeDisplay<'a, T: ?Sized>(&'a T);
 
+impl<T: RadykoDateTime + ?Sized> RadykoDateTimeDisplay<'_, T> {
+    const FORMAT_STR: &'static str = "%Y%m%d%H%M%S";
+}
+
 impl<T: RadykoDateTime + ?Sized> Display for RadykoDateTimeDisplay<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0.format(T::format_str()))
+        f.write_str(&self.0.format(Self::FORMAT_STR))
     }
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -183,10 +183,46 @@ impl SeekStartAt {
     }
 }
 
+/// https://serde.rs/custom-date-format.html
+mod jst_datetime {
+
+    use jiff::civil::DateTime;
+    use serde::{Deserialize, Deserializer, de::Error as _};
+
+    use crate::{
+        RADYKO_TZ_NAME,
+        domain::program::program_id::{RadykoDateTime, RadykoDateTimeDisplay},
+    };
+
+    // The signature of a deserialize_with function must follow the pattern:
+    //
+    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
+    //    where
+    //        D: Deserializer<'de>
+    //
+    // although it may also be generic over the output types T.
+    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+    where
+        T: RadykoDateTime,
+        D: Deserializer<'de>,
+    {
+        let s =
+            String::deserialize(deserializer).map_err(|e| D::Error::custom(format!("{e:#?}")))?;
+        let datetime = DateTime::strptime(RadykoDateTimeDisplay::<T>::FORMAT_STR, &s)
+            .map_err(|e| D::Error::custom(format!("{e:#?}")))?;
+
+        datetime.in_tz(RADYKO_TZ_NAME).map(T::new).map_err(|e| {
+            D::Error::custom(format!(
+                "jst_datetime deserialize error s: {s} error: {e:#?}"
+            ))
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        radiko::model::program::{EndAt, RadykoDateTime, SeekStartAt, StartAt},
+        domain::program::{EndAt, RadykoDateTime, SeekStartAt, StartAt},
         test_helper::parse_datetime_in_tz_tokyo,
     };
 

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use anyhow::Context;
 
 use crate::{
-    radiko::model::program::{Program, Programs, StartAt, StationId},
-    radiko::{api::endpoint::Endpoint, dto::xml::RadikoProgramXml},
+    domain::program::{Program, Programs, StartAt, StationId},
+    radiko::{api::endpoint::Endpoint, dto::xml::program_xml::RadikoProgramXml},
 };
 
 #[derive(Debug, Clone)]

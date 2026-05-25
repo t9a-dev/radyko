@@ -8,7 +8,7 @@ use tracing::warn;
 
 use crate::{
     app::{types::Station, utils::Utils},
-    radiko::model::program::{Program, Programs, RadykoDateTime, StartAt},
+    domain::program::{Program, Programs, RadykoDateTime, StartAt},
 };
 
 use crate::app::ports::RadikoClient;

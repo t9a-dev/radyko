@@ -1,3 +1,1 @@
-mod program_json;
-
-pub use program_json::*;
+pub(in crate::radiko) mod program_json;

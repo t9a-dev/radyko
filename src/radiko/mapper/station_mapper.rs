@@ -1,32 +1,10 @@
-use serde_derive::Deserialize;
-
-use crate::radiko::dto::xml::{StationXml, StationsXml};
-
-use super::logo::Logo;
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize)]
-pub struct Stations {
-    area_id: String,
-    area_name: String,
-    data: Vec<Station>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize)]
-pub struct Station {
-    id: String,
-    name: String,
-    ascii_name: String,
-    ruby: String,
-    areafree: bool,
-    timefree: bool,
-    logos: Vec<Logo>,
-    banner: String,
-    href: String,
-    simul_max_delay: u32,
-    tf_max_delay: u32,
-}
+use crate::{
+    domain::{
+        Logo,
+        station::{Station, Stations},
+    },
+    radiko::dto::xml::station_xml::{StationXml, StationsXml},
+};
 
 impl From<StationXml> for Station {
     fn from(value: StationXml) -> Self {

@@ -8,6 +8,7 @@ use jiff::Zoned;
 use tempfile::TempDir;
 use tracing::error;
 
+use crate::app::credential::RadikoCredential;
 use crate::{
     app::{
         config::{RadykoConfig, RecordingConfig},
@@ -15,11 +16,8 @@ use crate::{
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},
-    radiko::{
-        RadikoCredential,
-        model::program::{Program, ProgramId, RadykoDateTime},
-        new_radiko_client,
-    },
+    domain::program::{Program, ProgramId, RadykoDateTime},
+    radiko::new_radiko_client,
 };
 
 pub struct AppState {
@@ -110,7 +108,7 @@ impl RecorderState {
         Ok(self
             .inner
             .reserved_program_repository
-            .get_reserved_program_ids()?
+            .reserved_program_ids()?
             .into_iter()
             .filter(|p| p.end_at().date() < now)
             .collect())
@@ -130,7 +128,7 @@ impl RecorderState {
         if let Err(e) = self
             .inner
             .reserved_program_repository
-            .append_reserved_program(&reserved_programs)
+            .save_reserved_programs(&reserved_programs)
         {
             error!("add reserve program error: {:#?} ", e);
         }
@@ -193,8 +191,8 @@ mod tests {
     use crate::{
         RADYKO_TZ_NAME,
         app::state::{AppState, RecorderState},
+        domain::program::{EndAt, Program, ProgramId, RadykoDateTime, StartAt, StationId},
         infrastructure::new_file_reserved_repository,
-        radiko::model::program::{EndAt, Program, ProgramId, RadykoDateTime, StartAt, StationId},
         test_helper::{load_example_config, radiko_client},
     };
 

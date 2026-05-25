@@ -8,7 +8,6 @@ mod programs;
 pub use duration_buffer::{BufferSecs, EndBuffer, RecordingDurationBuffers, StartBuffer};
 pub use error::ProgramParseError;
 pub use program::Program;
-pub use program::jst_datetime;
 pub use program_id::RadykoDateTime;
 pub use program_id::{EndAt, SeekStartAt, StartAt};
 pub use program_id::{ProgramId, StationId};

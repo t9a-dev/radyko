@@ -1,4 +1,4 @@
-use crate::radiko::model::program::ProgramId;
+use crate::domain::program::ProgramId;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Keyword(String);

@@ -5,9 +5,8 @@ use futures::{StreamExt, TryStreamExt, stream};
 use crate::{
     RADYKO_CONCURRENCY,
     app::program_selector::ProgramSelector,
-    radiko::dto::{json::RootJson, xml::RadikoProgramXml},
-    radiko::model::program::{
-        Program, ProgramParseError, RadykoDateTime, {ProgramId, StartAt},
+    domain::program::{
+        Program, RadykoDateTime, {ProgramId, StartAt},
     },
 };
 
@@ -15,16 +14,22 @@ use crate::app::ports::RadikoClient;
 
 #[derive(Debug, Clone)]
 pub struct Programs {
-    data: Vec<Program>,
+    programs: Vec<Program>,
 }
 
 impl Programs {
+    pub fn new(programs: Vec<Program>) -> Self {
+        Self { programs }
+    }
+
     pub fn to_vec(&self) -> Vec<Program> {
-        self.data.clone()
+        self.programs.clone()
     }
 
     pub fn find_program(self, start_at: &StartAt) -> Option<Program> {
-        self.data.into_iter().find(|p| p.start_at().eq(start_at))
+        self.programs
+            .into_iter()
+            .find(|p| p.start_at().eq(start_at))
     }
 
     pub async fn resolve_program_ids(
@@ -75,47 +80,9 @@ impl Programs {
         Ok(radiko_client
             .weekly_programs(station_id)
             .await?
-            .data
+            .programs
             .into_iter()
             .map(|program| program.start_time_to_program())
             .collect::<HashMap<_, _>>())
-    }
-}
-
-impl TryFrom<RadikoProgramXml> for Programs {
-    type Error = ProgramParseError;
-
-    fn try_from(value: RadikoProgramXml) -> Result<Self, Self::Error> {
-        let mut programs = Vec::new();
-        for station in value.stations.station {
-            for programs_xml in station.programs {
-                let Some(programs_xml) = programs_xml.program else {
-                    continue;
-                };
-
-                for mut program_xml in programs_xml {
-                    program_xml.station_id = station.id.clone();
-                    programs.push(Program::try_from(program_xml)?);
-                }
-            }
-        }
-        Ok(Programs { data: programs })
-    }
-}
-
-impl TryFrom<RootJson> for Programs {
-    type Error = ProgramParseError;
-
-    fn try_from(value: RootJson) -> Result<Self, Self::Error> {
-        let Some(programs_json) = value.data else {
-            return Ok(Self { data: vec![] });
-        };
-
-        Ok(Self {
-            data: programs_json
-                .into_iter()
-                .flat_map(Program::try_from)
-                .collect::<Vec<_>>(),
-        })
     }
 }

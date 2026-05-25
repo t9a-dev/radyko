@@ -1,14 +1,31 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, str::FromStr, sync::Arc};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 
 use base64::{Engine, engine::general_purpose};
 use regex::Regex;
-use reqwest::{Client, cookie::Jar, header::HeaderMap};
+use reqwest::{
+    Client, Url,
+    cookie::{self, Jar},
+    header::HeaderMap,
+};
+use serde::Deserialize;
 use tracing::info;
 
-use crate::radiko::{RadikoCredential, api::endpoint::Endpoint};
+use crate::{app::credential::RadikoCredential, radiko::api::endpoint::Endpoint};
 
+#[derive(Debug, Clone, Deserialize)]
+struct LoginResponse {
+    radiko_session: String,
+    // twitter_name: Option<String>,
+    // status: String,
+    // unpaid: String,
+    // areafree: String,
+    // member_ukey: String,
+    // facebook_name: Option<String>,
+    // privileges: Vec<String>,
+    // paid_member: String,
+}
 #[derive(Debug, Clone)]
 pub struct RadikoAuthedClient(reqwest::Client);
 
@@ -77,10 +94,7 @@ impl RadikoAuth {
 
         // login
         let is_area_free = &credential.is_some();
-        let cookie = match &credential {
-            Some(credential) => credential.login().await?,
-            _ => Arc::new(Jar::default()),
-        };
+        let cookie = Self::login(&credential).await?;
         let logined_client = Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .cookie_provider(cookie.clone())
@@ -156,6 +170,43 @@ impl RadikoAuth {
                 credential,
             }),
         })
+    }
+
+    pub async fn login(credential: &Option<RadikoCredential>) -> anyhow::Result<Arc<cookie::Jar>> {
+        let Some(credential) = credential else {
+            return Ok(Arc::new(Jar::default()));
+        };
+
+        let mut login_info = HashMap::new();
+        login_info.insert("mail", credential.expose_email_address());
+        login_info.insert("pass", credential.expose_password());
+
+        let login_res: LoginResponse = Client::new()
+            .post(Endpoint::login_endpoint())
+            .form(&login_info)
+            .send()
+            .await?
+            .json()
+            .await?;
+        let cookie = format!("radiko_session={}", login_res.radiko_session);
+        let jar = Arc::new(Jar::default());
+        jar.add_cookie_str(&cookie, &Url::from_str(Endpoint::RADIKO_HOST)?);
+
+        let login_check_res = Client::builder()
+            .cookie_provider(jar.clone())
+            .build()?
+            .get(Endpoint::LOGIN_CHECK_URL)
+            .send()
+            .await?;
+
+        if !login_check_res.status().is_success() {
+            bail!(format!(
+                "login check failed: {}",
+                login_check_res.text().await?
+            ));
+        }
+
+        Ok(jar)
     }
 
     async fn get_public_auth_key() -> anyhow::Result<String> {

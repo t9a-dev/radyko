@@ -1,2 +1,2 @@
-pub mod json;
-pub mod xml;
+pub(in crate::radiko) mod json;
+pub(in crate::radiko) mod xml;

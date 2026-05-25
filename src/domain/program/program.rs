@@ -5,25 +5,18 @@ use crate::{
         hls::{ByteSize, StreamHandler},
         ports::RadikoClient,
     },
-    radiko::{
-        dto::json::ProgramJson,
-        model::program::{
-            BufferSecs, RadykoDateTime, RecordingDurationBuffers, duration_buffer::StartBuffer,
-        },
+    domain::program::{
+        BufferSecs, RadykoDateTime, RecordingDurationBuffers, duration_buffer::StartBuffer,
     },
 };
 use futures::stream::BoxStream;
-use jiff::{ToSpan, Zoned, civil::DateTime};
+use jiff::{ToSpan, Zoned};
 use sanitise_file_name::sanitise;
 use tracing::trace;
 
 use crate::{
-    RADYKO_TZ_NAME,
     app::utils::Utils,
-    radiko::dto::xml::ProgramXml,
-    radiko::model::program::{
-        ProgramParseError, {EndAt, ProgramId, StartAt, StationId},
-    },
+    domain::program::{EndAt, ProgramId, StartAt, StationId},
 };
 
 #[derive(Debug, Clone)]
@@ -207,143 +200,35 @@ impl Program {
     }
 }
 
-impl TryFrom<ProgramXml> for Program {
-    type Error = ProgramParseError;
-
-    fn try_from(value: ProgramXml) -> Result<Self, Self::Error> {
-        const RADIKO_XML_DATETIME_FORMAT: &str = "%Y%m%d%H%M%S";
-        let ft = DateTime::strptime(RADIKO_XML_DATETIME_FORMAT, &value.ft)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!("failed parse ft: {}, error: {e:#?}", value.ft))
-            })?
-            .in_tz(RADYKO_TZ_NAME)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!(
-                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
-                ))
-            })?;
-        let to = DateTime::strptime(RADIKO_XML_DATETIME_FORMAT, &value.to)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!("failed parse to: {}, error: {e:#?}", value.to))
-            })?
-            .in_tz(RADYKO_TZ_NAME)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!(
-                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
-                ))
-            })?;
-
-        Ok(Program {
-            program_id: ProgramId::new(
-                StationId::new(value.station_id),
-                StartAt::new(ft),
-                EndAt::new(to),
-            ),
-            title: value.title.clone(),
-            performer: value.pfm.unwrap_or_default(),
-        })
-    }
-}
-
-impl TryFrom<ProgramJson> for Program {
-    type Error = ProgramParseError;
-
-    fn try_from(value: ProgramJson) -> Result<Self, Self::Error> {
-        const RADIKO_JSON_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
-        let ft = DateTime::strptime(RADIKO_JSON_DATETIME_FORMAT, &value.start_time)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!("failed parse ft: {}, error: {e:#?}", value.start_time))
-            })?
-            .in_tz(RADYKO_TZ_NAME)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!(
-                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
-                ))
-            })?;
-        let to = DateTime::strptime(RADIKO_JSON_DATETIME_FORMAT, &value.end_time)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!("failed parse to: {}, error: {e:#?}", value.end_time))
-            })?
-            .in_tz(RADYKO_TZ_NAME)
-            .map_err(|e| {
-                ProgramParseError::Invalid(format!(
-                    "failed convert to Zoned datetime time_zone_name: {RADYKO_TZ_NAME}, error: {e:#?}"
-                ))
-            })?;
-
-        Ok(Program {
-            program_id: ProgramId::new(
-                StationId::new(value.station_id),
-                StartAt::new(ft),
-                EndAt::new(to),
-            ),
-            title: value.title,
-            performer: value.performer,
-        })
-    }
-}
 /// https://serde.rs/custom-date-format.html
-pub mod jst_datetime {
+// pub mod program_id {
 
-    use jiff::civil::DateTime;
-    use serde::{Deserialize, Deserializer, de::Error as _};
+//     use serde::{Deserialize, Deserializer, de::Error as _};
 
-    use crate::{RADYKO_TZ_NAME, radiko::model::program::program_id::RadykoDateTime};
+//     use crate::domain::program::ProgramId;
 
-    // The signature of a deserialize_with function must follow the pattern:
-    //
-    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
-    //    where
-    //        D: Deserializer<'de>
-    //
-    // although it may also be generic over the output types T.
-    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-    where
-        T: RadykoDateTime,
-        D: Deserializer<'de>,
-    {
-        let s =
-            String::deserialize(deserializer).map_err(|e| D::Error::custom(format!("{e:#?}")))?;
-        let datetime = DateTime::strptime(T::format_str(), &s)
-            .map_err(|e| D::Error::custom(format!("{e:#?}")))?;
-
-        datetime.in_tz(RADYKO_TZ_NAME).map(T::new).map_err(|e| {
-            D::Error::custom(format!(
-                "jst_datetime deserialize error s: {s} error: {e:#?}"
-            ))
-        })
-    }
-}
-
-/// https://serde.rs/custom-date-format.html
-pub mod program_id {
-
-    use serde::{Deserialize, Deserializer, de::Error as _};
-
-    use crate::radiko::model::program::ProgramId;
-
-    // The signature of a deserialize_with function must follow the pattern:
-    //
-    //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
-    //    where
-    //        D: Deserializer<'de>
-    //
-    // although it may also be generic over the output types T.
-    #[allow(dead_code)]
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<ProgramId, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        ProgramId::deserialize(deserializer)
-            .map_err(|e| D::Error::custom(format!("program_id deserialize error: {e:#?}")))
-    }
-}
+//     // The signature of a deserialize_with function must follow the pattern:
+//     //
+//     //    fn deserialize<'de, D>(D) -> Result<T, D::Error>
+//     //    where
+//     //        D: Deserializer<'de>
+//     //
+//     // although it may also be generic over the output types T.
+//     #[allow(dead_code)]
+//     pub fn deserialize<'de, D>(deserializer: D) -> Result<ProgramId, D::Error>
+//     where
+//         D: Deserializer<'de>,
+//     {
+//         ProgramId::deserialize(deserializer)
+//             .map_err(|e| D::Error::custom(format!("program_id deserialize error: {e:#?}")))
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
 
     use crate::{
-        radiko::model::program::{EndBuffer, StartBuffer},
+        domain::program::{EndBuffer, StartBuffer},
         test_helper::parse_datetime_in_tz_tokyo,
     };
 

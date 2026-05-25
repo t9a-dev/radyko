@@ -1,9 +1,7 @@
 use futures::stream::BoxStream;
 use jiff::Zoned;
 
-use crate::radiko::model::program::{
-    Program, ProgramId, Programs, SeekStartAt, StartAt, StationId,
-};
+use crate::domain::program::{Program, ProgramId, Programs, SeekStartAt, StartAt, StationId};
 
 #[async_trait::async_trait]
 pub trait RadikoClient: Send + Sync {

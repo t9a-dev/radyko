@@ -5,7 +5,7 @@ use crate::{
         ports::RadikoClient,
         types::{Keyword, Station},
     },
-    radiko::model::program::Programs,
+    domain::program::Programs,
 };
 
 pub async fn search_programs(

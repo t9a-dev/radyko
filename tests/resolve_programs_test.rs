@@ -10,7 +10,7 @@ mod resolve_programs_test {
             config::{RadykoConfigKeywords, RadykoConfigRules},
             types::Station,
         },
-        radiko::model::program::Programs,
+        domain::program::Programs,
     };
 
     #[tokio::test]

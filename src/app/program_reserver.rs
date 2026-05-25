@@ -8,7 +8,7 @@ use crate::{
         recording::{self},
         types::RecordingEvent,
     },
-    radiko::model::program::{Program, RecordingDurationBuffers},
+    domain::program::{Program, RecordingDurationBuffers},
 };
 
 #[derive(Clone)]
