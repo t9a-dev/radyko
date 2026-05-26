@@ -1,6 +1,6 @@
 pub mod application;
 pub mod cli;
-pub mod commands;
+pub mod command;
 mod constants;
 pub mod domain;
 pub mod infrastructure;

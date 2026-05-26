@@ -5,7 +5,7 @@ mod rule_command_test {
     use std::io::Write;
     use std::path::PathBuf;
 
-    use radyko::{application::config, cli::RuleArgs, commands::rule};
+    use radyko::{application::config, cli::RuleArgs, command::rule};
     use tempfile::NamedTempFile;
 
     #[tokio::test]
