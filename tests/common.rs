@@ -8,7 +8,7 @@ pub mod tests_common {
 
     use radyko::application::config;
     use radyko::application::config::RadykoConfig;
-    use radyko::application::ports::RadikoClient;
+    use radyko::application::port::RadikoClient;
     use radyko::radiko::new_radiko_client;
     use tokio::sync::OnceCell;
 

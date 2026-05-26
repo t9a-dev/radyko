@@ -6,13 +6,13 @@ use std::{
 };
 
 use crate::{
-    application::ports,
+    application::port,
     domain::program::{Program, ProgramId},
 };
 
 pub fn new_file_reserved_repository(
     reserved_state_file_path: PathBuf,
-) -> Arc<dyn ports::ReservedProgramRepository> {
+) -> Arc<dyn port::ReservedProgramRepository> {
     let _ = fs::File::create_new(reserved_state_file_path.as_path());
     Arc::new(FileReservedProgramRepository {
         reserved_state_file_path,
@@ -23,7 +23,7 @@ struct FileReservedProgramRepository {
     reserved_state_file_path: PathBuf,
 }
 
-impl ports::ReservedProgramRepository for FileReservedProgramRepository {
+impl port::ReservedProgramRepository for FileReservedProgramRepository {
     fn reserved_program_ids(&self) -> anyhow::Result<Vec<ProgramId>> {
         ProgramId::parse_from_string(fs::read_to_string(self.reserved_state_file_path.clone())?)
     }

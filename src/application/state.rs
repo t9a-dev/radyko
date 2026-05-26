@@ -12,7 +12,7 @@ use crate::application::credential::RadikoCredential;
 use crate::{
     application::{
         config::{RadykoConfig, RecordingConfig},
-        ports::{RadikoClient, ReservedProgramRepository},
+        port::{RadikoClient, ReservedProgramRepository},
         utils::Utils,
     },
     cli::{RecorderArgs, RuleArgs},

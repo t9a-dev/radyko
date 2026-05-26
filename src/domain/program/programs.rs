@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use crate::application::ports::RadikoClient;
+use crate::application::port::RadikoClient;
 
 #[derive(Debug, Clone)]
 pub struct Programs {

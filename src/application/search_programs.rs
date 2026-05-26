@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     application::{
-        ports::RadikoClient,
+        port::RadikoClient,
         types::{Keyword, Station},
     },
     domain::program::Programs,

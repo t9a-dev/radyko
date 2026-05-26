@@ -11,7 +11,7 @@ use crate::{
     domain::program::{Program, Programs, RadykoDateTime, StartAt},
 };
 
-use crate::application::ports::RadikoClient;
+use crate::application::port::RadikoClient;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ScheduleError {

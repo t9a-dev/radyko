@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 use crate::{
     application::{
         hls::{ByteSize, StreamHandler},
-        ports::RadikoClient,
+        port::RadikoClient,
     },
     domain::program::{
         BufferSecs, RadykoDateTime, RecordingDurationBuffers, duration_buffer::StartBuffer,

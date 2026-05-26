@@ -32,12 +32,12 @@ struct RadikoClientRef {
 // RadikoClientのnewメソッドのみを公開したいので、ファクトリメソッド経由で公開
 pub async fn new_radiko_client(
     credential: Option<RadikoCredential>,
-) -> anyhow::Result<Arc<dyn crate::application::ports::RadikoClient>> {
+) -> anyhow::Result<Arc<dyn crate::application::port::RadikoClient>> {
     Ok(Arc::new(RadikoClient::new(credential).await?))
 }
 
 #[async_trait::async_trait]
-impl application::ports::RadikoClient for RadikoClient {
+impl application::port::RadikoClient for RadikoClient {
     async fn refresh_auth(&self) -> anyhow::Result<()> {
         let refreshed_auth = self.auth_state.read().await.refresh_auth().await?;
         {

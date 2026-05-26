@@ -4,7 +4,7 @@ use tracing::{Instrument, error};
 
 use crate::{
     application::{
-        ports::RadikoClient,
+        port::RadikoClient,
         recording::{self},
         types::RecordingEvent,
     },

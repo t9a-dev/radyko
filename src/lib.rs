@@ -28,7 +28,7 @@ pub mod test_helper {
         application::{
             config::{self, RadykoConfig},
             credential::RadikoCredential,
-            ports::RadikoClient,
+            port::RadikoClient,
         },
         radiko::new_radiko_client,
     };
