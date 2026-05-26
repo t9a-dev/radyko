@@ -12,7 +12,7 @@ use reqwest::{
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{app::credential::RadikoCredential, radiko::api::endpoint::Endpoint};
+use crate::{application::credential::RadikoCredential, radiko::api::endpoint::Endpoint};
 
 #[derive(Debug, Clone, Deserialize)]
 struct LoginResponse {

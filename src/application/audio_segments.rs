@@ -58,7 +58,7 @@ mod audio_segments_test {
 
     use bytes::Bytes;
 
-    use crate::app::audio_segments::{AudioSegment, AudioSegments};
+    use crate::application::audio_segments::{AudioSegment, AudioSegments};
 
     #[test]
     fn flush_entries_in_ascending_sequence_order() -> anyhow::Result<()> {

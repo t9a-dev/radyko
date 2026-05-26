@@ -4,7 +4,7 @@ use jiff::Zoned;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::app::{program_selector::ProgramSelector, types::Station};
+use crate::application::{program_selector::ProgramSelector, types::Station};
 
 pub const EXAMPLE_CONFIG: &str = r#"# src/app/config.rs
 

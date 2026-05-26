@@ -8,9 +8,9 @@ use jiff::Zoned;
 use tempfile::TempDir;
 use tracing::error;
 
-use crate::app::credential::RadikoCredential;
+use crate::application::credential::RadikoCredential;
 use crate::{
-    app::{
+    application::{
         config::{RadykoConfig, RecordingConfig},
         ports::{RadikoClient, ReservedProgramRepository},
         utils::Utils,
@@ -190,7 +190,7 @@ mod tests {
 
     use crate::{
         RADYKO_TZ_NAME,
-        app::state::{AppState, RecorderState},
+        application::state::{AppState, RecorderState},
         domain::program::{EndAt, Program, ProgramId, RadykoDateTime, StartAt, StationId},
         infrastructure::new_file_reserved_repository,
         test_helper::{load_example_config, radiko_client},

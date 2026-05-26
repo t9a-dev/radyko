@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    app::{
+    application::{
         ports::RadikoClient,
         types::{Keyword, Station},
     },

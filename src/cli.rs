@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::bail;
 use clap::{Args, Parser, Subcommand};
 
-use crate::app::config::{self};
+use crate::application::config::{self};
 use crate::commands::{recorder, rule, search};
 use crate::telemetry::{init_telemetry, send_otel_connectivity_check};
 

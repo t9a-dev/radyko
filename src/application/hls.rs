@@ -56,7 +56,7 @@ use tokio::{
 };
 use tracing::{Instrument, error, info, info_span, trace, warn};
 
-use crate::app::audio_segments::{AudioSegment, AudioSegments};
+use crate::application::audio_segments::{AudioSegment, AudioSegments};
 
 #[derive(Debug)]
 pub struct ByteSize(u64);

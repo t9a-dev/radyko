@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use tracing::{Instrument, error};
 
 use crate::{
-    app::{
+    application::{
         ports::RadikoClient,
         recording::{self},
         types::RecordingEvent,

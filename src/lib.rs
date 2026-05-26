@@ -1,4 +1,4 @@
-pub mod app;
+pub mod application;
 pub mod cli;
 pub mod commands;
 mod constants;
@@ -25,7 +25,7 @@ pub mod test_helper {
 
     use crate::{
         RADYKO_TZ_NAME,
-        app::{
+        application::{
             config::{self, RadykoConfig},
             credential::RadikoCredential,
             ports::RadikoClient,

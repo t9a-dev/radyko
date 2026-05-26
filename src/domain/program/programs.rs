@@ -4,13 +4,13 @@ use futures::{StreamExt, TryStreamExt, stream};
 
 use crate::{
     RADYKO_CONCURRENCY,
-    app::program_selector::ProgramSelector,
+    application::program_selector::ProgramSelector,
     domain::program::{
         Program, RadykoDateTime, {ProgramId, StartAt},
     },
 };
 
-use crate::app::ports::RadikoClient;
+use crate::application::ports::RadikoClient;
 
 #[derive(Debug, Clone)]
 pub struct Programs {

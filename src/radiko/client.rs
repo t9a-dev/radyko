@@ -6,7 +6,7 @@ use jiff::{ToSpan, Zoned};
 use reqwest::Client;
 
 use crate::{
-    app::{self, credential::RadikoCredential, utils::Utils},
+    application::{self, credential::RadikoCredential, utils::Utils},
     domain::program::{Program, ProgramId, Programs, SeekStartAt, StartAt, StationId},
     radiko::api::{
         auth::RadikoAuth,
@@ -32,12 +32,12 @@ struct RadikoClientRef {
 // RadikoClientのnewメソッドのみを公開したいので、ファクトリメソッド経由で公開
 pub async fn new_radiko_client(
     credential: Option<RadikoCredential>,
-) -> anyhow::Result<Arc<dyn crate::app::ports::RadikoClient>> {
+) -> anyhow::Result<Arc<dyn crate::application::ports::RadikoClient>> {
     Ok(Arc::new(RadikoClient::new(credential).await?))
 }
 
 #[async_trait::async_trait]
-impl app::ports::RadikoClient for RadikoClient {
+impl application::ports::RadikoClient for RadikoClient {
     async fn refresh_auth(&self) -> anyhow::Result<()> {
         let refreshed_auth = self.auth_state.read().await.refresh_auth().await?;
         {

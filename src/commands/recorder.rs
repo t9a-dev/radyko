@@ -1,6 +1,6 @@
 use crate::{
     RADYKO_CONCURRENCY,
-    app::{
+    application::{
         program_reserver::ProgramReserver,
         state::{AppState, RecorderState},
         types::RecordingEvent,

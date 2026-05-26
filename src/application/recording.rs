@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use tracing::{info, trace};
 
 use crate::{
-    app::{hls::StreamHandler, ports::RadikoClient},
+    application::{hls::StreamHandler, ports::RadikoClient},
     domain::program::{Program, RecordingDurationBuffers},
 };
 

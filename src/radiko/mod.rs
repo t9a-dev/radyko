@@ -12,7 +12,7 @@ mod test_helper {
     use reqwest::Client;
     use tokio::sync::RwLock;
 
-    use crate::app::credential::RadikoCredential;
+    use crate::application::credential::RadikoCredential;
     use crate::radiko::api::{
         auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
         stream::RadikoStream,

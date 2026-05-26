@@ -6,9 +6,9 @@ pub mod tests_common {
     use std::io::Cursor;
     use std::sync::Arc;
 
-    use radyko::app::config;
-    use radyko::app::config::RadykoConfig;
-    use radyko::app::ports::RadikoClient;
+    use radyko::application::config;
+    use radyko::application::config::RadykoConfig;
+    use radyko::application::ports::RadikoClient;
     use radyko::radiko::new_radiko_client;
     use tokio::sync::OnceCell;
 

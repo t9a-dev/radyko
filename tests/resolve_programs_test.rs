@@ -6,7 +6,7 @@ mod resolve_programs_test {
 
     use crate::common::tests_common::{TEST_STATION_ID, radiko_client};
     use radyko::{
-        app::{
+        application::{
             config::{RadykoConfigKeywords, RadykoConfigRules},
             types::Station,
         },
@@ -20,7 +20,7 @@ mod resolve_programs_test {
         // "オールナイトニッポン"をキーワードに加えて検索結果が常に1件以上になるように調整
         let mut keywords = HashMap::new();
         keywords.insert(
-            radyko::app::types::Station::Id("LFR".to_string()),
+            radyko::application::types::Station::Id("LFR".to_string()),
             vec!["オールナイトニッポン".to_string()],
         );
         let program_selectors = RadykoConfigKeywords::new(keywords).into_program_selectors();

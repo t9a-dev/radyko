@@ -3,7 +3,7 @@ mod common;
 #[cfg(test)]
 mod load_config_test {
 
-    use radyko::app::config::RadykoConfig;
+    use radyko::application::config::RadykoConfig;
     use std::{fs::File, io::BufReader};
 
     use crate::common::tests_common::{

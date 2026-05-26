@@ -6,7 +6,7 @@ use std::{
 use tracing::error;
 
 use crate::{
-    app::{state::AppState, utils::Utils},
+    application::{state::AppState, utils::Utils},
     cli::RuleArgs,
     domain::program::Programs,
 };

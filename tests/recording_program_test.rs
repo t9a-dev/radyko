@@ -5,7 +5,7 @@ mod recording_program_test {
     use std::{path::PathBuf, sync::Arc, time::Duration};
 
     use radyko::{
-        app::{
+        application::{
             config::{RecordingConfig, RecordingDurationBufferConfig},
             program_reserver::ProgramReserver,
             utils::Utils,

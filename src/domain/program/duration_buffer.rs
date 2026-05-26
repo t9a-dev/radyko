@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::app::config::RecordingDurationBufferConfig;
+use crate::application::config::RecordingDurationBufferConfig;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RecordingDurationBuffers {

@@ -7,11 +7,11 @@ use thiserror::Error;
 use tracing::warn;
 
 use crate::{
-    app::{types::Station, utils::Utils},
+    application::{types::Station, utils::Utils},
     domain::program::{Program, Programs, RadykoDateTime, StartAt},
 };
 
-use crate::app::ports::RadikoClient;
+use crate::application::ports::RadikoClient;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ScheduleError {
