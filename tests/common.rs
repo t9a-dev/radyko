@@ -10,7 +10,9 @@ pub mod tests_common {
     use radyko::application::config::RadykoConfig;
     use radyko::application::port::RadikoClient;
     use radyko::radiko::new_radiko_client;
+    use sanitise_file_name::sanitise;
     use tokio::sync::OnceCell;
+    use walkdir::WalkDir;
 
     /// Tokyo
     pub const TEST_AREA_ID: &str = "JP13";
@@ -31,5 +33,16 @@ pub mod tests_common {
         RADIKO_CLIENT
             .get_or_init(|| async { new_radiko_client(None).await.unwrap() })
             .await
+    }
+
+    pub fn exists_file(dir: &str, target_file_name: &str) -> bool {
+        WalkDir::new(dir)
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry.file_type().is_file()
+                    && Some(sanitise(entry.file_name().to_str().unwrap()))
+                        == Some(sanitise(target_file_name))
+            })
     }
 }

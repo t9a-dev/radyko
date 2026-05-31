@@ -6,10 +6,7 @@ use futures::{StreamExt, stream::BoxStream};
 use hls_m3u8::MasterPlaylist;
 use tempfile::NamedTempFile;
 
-use crate::{
-    RADYKO_CONCURRENCY,
-    domain::program::{ProgramId, SeekStartAt},
-};
+use crate::domain::program::{ProgramId, SeekStartAt};
 
 use super::{auth::RadikoAuth, endpoint::Endpoint};
 
@@ -70,6 +67,7 @@ impl RadikoStream {
     pub fn stream_timefree_medialist_urls(
         self,
         program_id: ProgramId,
+        download_concurrency: usize,
     ) -> BoxStream<'static, anyhow::Result<String>> {
         let seek_times = SeekStartAt::calculate_seek_start_times(
             program_id.start_at().clone(),
@@ -86,7 +84,7 @@ impl RadikoStream {
                         .await
                 }
             })
-            .buffer_unordered(RADYKO_CONCURRENCY)
+            .buffer_unordered(download_concurrency)
             .boxed()
     }
 

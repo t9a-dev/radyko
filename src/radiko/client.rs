@@ -146,14 +146,15 @@ impl application::port::RadikoClient for RadikoClient {
         self.inner.program.find_program(station_id, start_at).await
     }
 
-    fn stream_timefree_medialist_urls(
+    fn concurrent_timefree_medialist_urls(
         &self,
         program_id: ProgramId,
+        download_concurrency: usize,
     ) -> BoxStream<'static, anyhow::Result<String>> {
         self.inner
             .stream
             .clone()
-            .stream_timefree_medialist_urls(program_id)
+            .stream_timefree_medialist_urls(program_id, download_concurrency)
             .boxed()
     }
 }

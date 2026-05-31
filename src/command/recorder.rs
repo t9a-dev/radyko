@@ -1,21 +1,18 @@
 use crate::{
-    RADYKO_CONCURRENCY,
     application::{
-        program_reserver::ProgramReserver,
+        port::RadikoClient,
         state::{AppState, RecorderState},
-        types::RecordingEvent,
-        utils::{self, Utils},
+        usecase::{
+            download_timefree::DownloadTimeFreeUseCase, reserve_program::ReserveProgramUseCase,
+        },
+        utils::Utils,
     },
     cli::RecorderArgs,
-    domain::program::{Program, Programs, RecordingDurationBuffers},
+    domain::program::Programs,
     infrastructure::new_file_reserved_repository,
 };
-use futures::{StreamExt, stream::BoxStream};
-use std::{
-    io::{BufWriter, Write},
-    sync::Arc,
-};
-use tracing::{debug, error, info};
+use std::{path::PathBuf, sync::Arc};
+use tracing::{error, info};
 
 // 構造体の内容がまるごと表示されてノイズになるので出力対象外にしている。skip(recorder_state)
 #[tracing::instrument(name = "cli_command_recorder" skip(args))]
@@ -23,156 +20,80 @@ pub async fn run(args: RecorderArgs) -> anyhow::Result<()> {
     let app_state = Arc::new(AppState::build_from_recorder_args(args.clone()).await?);
     Utils::is_writable_output_dir(&app_state.output_dir().to_string_lossy());
 
-    // 録音ファイル出力ディレクトリ直下に録音予約管理ファイルを配置することでコンテナ環境でも追加の設定無しに永続化できる
-    let reserved_state_file_path = app_state.output_dir().join("reserved_programs");
-    let recorder_state = Arc::new(RecorderState::new(
-        Arc::clone(&app_state),
-        new_file_reserved_repository(reserved_state_file_path),
-    ));
     let mut reserve_schedule_update_interval = tokio::time::interval(
-        tokio::time::Duration::from_secs(recorder_state.schedule_update_interval_secs()),
+        tokio::time::Duration::from_secs(app_state.schedule_update_interval_secs()),
     );
     // 最初のtick()は即座に完了する
     reserve_schedule_update_interval.tick().await;
 
+    // 録音ファイル出力ディレクトリ直下に録音予約管理ファイルを配置することでコンテナ環境でも追加の設定無しに永続化できる
+    let reserved_state_file_path = app_state.output_dir().join("reserved_programs");
+    let recorder_state = Arc::new(RecorderState::new(new_file_reserved_repository(
+        reserved_state_file_path,
+    )));
     loop {
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
-        match reserve(Arc::clone(&recorder_state), tx).await {
-            Ok(_) => info!("recorder run success"),
-            Err(e) => error!("recorder error: {:#?}", e),
-        }
-        let _ = recording_event_handler(Arc::clone(&recorder_state), rx).await;
-        if let Err(e) = download_timefree_programs(Arc::clone(&recorder_state)).await {
-            error!("timefree download error: {:#?}", e);
-        };
+        exec_reserve_programs(
+            Arc::clone(&app_state.radiko_client()),
+            Arc::clone(&app_state),
+            Arc::clone(&recorder_state),
+        )
+        .await?;
+        exec_download_timefree(
+            Arc::clone(&app_state.radiko_client()),
+            Arc::clone(&recorder_state),
+            app_state.output_dir(),
+        )
+        .await?;
+
         reserve_schedule_update_interval.tick().await;
-        if let Err(e) = recorder_state.reload_config(args.config.config_path.clone()) {
+        if let Err(e) = app_state.reload_config(args.config.config_path.clone()) {
             error!("error reload config: {:#?}", e);
         }
     }
 }
 
-async fn reserve(
+async fn exec_reserve_programs(
+    radiko_client: Arc<dyn RadikoClient>,
+    app_state: Arc<AppState>,
     recorder_state: Arc<RecorderState>,
-    tx: tokio::sync::mpsc::Sender<RecordingEvent>,
 ) -> anyhow::Result<()> {
-    info!("local now: {}", utils::Utils::formated_now_in_tz_tokyo()?);
-    let program_selectors = recorder_state
+    let reserve_program_usecase =
+        ReserveProgramUseCase::new(Arc::clone(&radiko_client), Arc::clone(&recorder_state));
+    let program_selectors = app_state
         .config()
         .read()
-        .expect("recorder_state config RwLock poisoned")
+        .expect("config RwLock poisoned")
         .collect_program_selectors()?;
-    let programs = Programs::resolve_selectors(
-        recorder_state.app_state().radiko_client(),
-        program_selectors,
-    )
-    .await?;
+    let programs =
+        Programs::resolve_selectors(Arc::clone(&radiko_client), program_selectors).await?;
 
-    // println!(): programsをforで回しながらprintln!()するとprintln!()のたびにstdioをロックする。
-    // writeln!(): 一度stdioをロックして、出力内容をbufferに書き溜めて最後に一度表示するので効率が良い。
-    // programsは100も行かないので記述量の増加を回収できないと考えるが、学習のためということで良しとする。
-    let stdio = std::io::stdout();
-    let mut writer = BufWriter::new(stdio.lock());
-
-    let program_reserver = ProgramReserver::new(
-        recorder_state.app_state().radiko_client(),
-        recorder_state.recording_config().output_dir,
-    );
-    let reserved_programs = recorder_state.add_reserve_programs(programs);
-    let buffer = RecordingDurationBuffers::from_config(
-        recorder_state.recording_config().duration_buffer_secs,
-    );
-    for program in reserved_programs {
-        let add_reserve_program_info = format!("add reserve: {}", program.info());
-        debug!(add_reserve_program_info);
-        writeln!(writer, "{}", add_reserve_program_info)?;
-        program_reserver
-            .reserve(program, buffer, tx.clone())
-            .await?;
+    match reserve_program_usecase
+        .exec(
+            programs,
+            app_state.output_dir(),
+            app_state.recording_duration_buffers(),
+        )
+        .await
+    {
+        Ok(_) => info!("recorder run success"),
+        Err(e) => error!("recorder error: {:#?}", e),
     }
-
-    writer.flush()?;
     Ok(())
 }
 
-async fn download_timefree_programs(recorder_state: Arc<RecorderState>) -> anyhow::Result<()> {
-    let program_ids = recorder_state.collect_aired_program_ids(None)?;
-    let radiko_client = recorder_state.app_state().radiko_client();
-    let timefree_programs = Programs::resolve_program_ids(radiko_client, program_ids).await?;
-    if timefree_programs.is_empty() {
-        info!("timefree programs empty");
-        return Ok(());
-    }
-
-    let http_client = reqwest::Client::new();
-    let mut stream_download_timefree_programs =
-        stream_download_timefree_programs(recorder_state, timefree_programs, http_client).await;
-
-    while let Some(Err(e)) = stream_download_timefree_programs.next().await {
-        error!("timefree download error: {e:#?}");
-    }
-
-    Ok(())
-}
-
-async fn stream_download_timefree_programs(
+async fn exec_download_timefree(
+    radiko_client: Arc<dyn RadikoClient>,
     recorder_state: Arc<RecorderState>,
-    programs: Vec<Program>,
-    http_client: reqwest::Client,
-) -> BoxStream<'static, anyhow::Result<()>> {
-    futures::stream::iter(programs)
-        .map(move |program| {
-            let shared_http_client = http_client.clone();
-            let shared_recorder_state = Arc::clone(&recorder_state);
-            async move {
-                info!("start download timefree {}", program.info());
-                shared_recorder_state
-                    .app_state()
-                    .radiko_client()
-                    .refresh_auth()
-                    .await?;
-
-                let shared_radiko_client =
-                    Arc::clone(&shared_recorder_state.app_state().radiko_client());
-                program
-                    .download_timefree(
-                        shared_recorder_state.app_state().output_dir(),
-                        shared_radiko_client,
-                        shared_http_client.clone(),
-                    )
-                    .await?;
-                shared_recorder_state.remove_reserved_program(program.program_id())?;
-
-                info!("sucess download timefree {}", program.info());
-                Ok(())
-            }
-        })
-        .buffer_unordered(RADYKO_CONCURRENCY)
-        .boxed()
-}
-
-async fn recording_event_handler(
-    recorder_state: Arc<RecorderState>,
-    mut rx: tokio::sync::mpsc::Receiver<RecordingEvent>,
+    output_root_dir: PathBuf,
 ) -> anyhow::Result<()> {
-    tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                RecordingEvent::Done(program_id) => {
-                    // 録音処理に成功したので録音予約情報を削除
-                    if let Err(e) = recorder_state.remove_reserved_program(program_id) {
-                        error!("failed remove reserved program: {:#?}", e);
-                    };
-                }
-                RecordingEvent::Fail(program_id) => {
-                    // 録音予約時点で録音予約は永続化されており、録音成功時に録音情報が削除される
-                    // タイムフリーダウンロード処理成功時点で永続化してある録音予約情報が削除される
-                    // ここでは録音予約情報を削除せず、ログだけ出力する
-                    info!("リアルタイム録音処理に失敗: {}", program_id);
-                }
-            }
-        }
-    });
+    let download_timefree_usecase = DownloadTimeFreeUseCase::new(
+        reqwest::Client::new(),
+        Arc::clone(&radiko_client),
+        recorder_state,
+    );
+    if let Err(e) = download_timefree_usecase.exec(&output_root_dir).await {
+        error!("timefree download error: {:#?}", e);
+    };
 
     Ok(())
 }

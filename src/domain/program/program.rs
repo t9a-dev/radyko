@@ -1,15 +1,11 @@
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use crate::{
-    application::{
-        hls::{ByteSize, StreamHandler},
-        port::RadikoClient,
-    },
+    application::port::RadikoClient,
     domain::program::{
         BufferSecs, RadykoDateTime, RecordingDurationBuffers, duration_buffer::StartBuffer,
     },
 };
-use futures::stream::BoxStream;
 use jiff::{ToSpan, Zoned};
 use sanitise_file_name::sanitise;
 use tracing::trace;
@@ -144,13 +140,6 @@ impl Program {
         (self.start_at(), self.clone())
     }
 
-    pub async fn stream_timefree_medialist_urls(
-        &self,
-        radiko_client: Arc<dyn RadikoClient>,
-    ) -> BoxStream<'static, anyhow::Result<String>> {
-        radiko_client.stream_timefree_medialist_urls(self.program_id())
-    }
-
     pub async fn media_list_url_for_live(
         &self,
         radiko_client: Arc<dyn RadikoClient>,
@@ -159,29 +148,6 @@ impl Program {
             .media_list_url_for_live(self.station_id().clone())
             .await?
             .to_string())
-    }
-
-    pub async fn download_timefree(
-        &self,
-        output_root_dir: PathBuf,
-        radiko_client: Arc<dyn RadikoClient>,
-        http_client: reqwest::Client,
-    ) -> anyhow::Result<()> {
-        let stream_media_list_urls = self.stream_timefree_medialist_urls(radiko_client).await;
-        let recorded_file_path = StreamHandler::new(http_client)
-            .download_timefree_program(
-                stream_media_list_urls,
-                self.output_dir(output_root_dir),
-                &self.output_filename(),
-            )
-            .await?;
-        let recorded_file = fs::File::open(recorded_file_path)?;
-        StreamHandler::verify_recorded_file(
-            ByteSize::from_bytes(recorded_file.metadata()?.len()),
-            self.on_air_duration_for_timefree(),
-        )?;
-
-        Ok(())
     }
 
     fn to_live_on_air_duration(&self, now: Option<Zoned>, start_buffer: &StartBuffer) -> Duration {
@@ -200,7 +166,7 @@ impl Program {
     }
 }
 
-/// https://serde.rs/custom-date-format.html
+// https://serde.rs/custom-date-format.html
 // pub mod program_id {
 
 //     use serde::{Deserialize, Deserializer, de::Error as _};

@@ -42,8 +42,9 @@ pub trait RadikoClient: Send + Sync {
         station_id: &StationId,
     ) -> anyhow::Result<Option<Program>>;
 
-    fn stream_timefree_medialist_urls(
+    fn concurrent_timefree_medialist_urls(
         &self,
         program_id: ProgramId,
+        download_concurrency: usize,
     ) -> BoxStream<'static, anyhow::Result<String>>;
 }

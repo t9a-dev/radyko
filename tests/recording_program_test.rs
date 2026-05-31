@@ -2,46 +2,37 @@ mod common;
 
 #[cfg(test)]
 mod recording_program_test {
-    use std::{path::PathBuf, sync::Arc, time::Duration};
+    use std::{sync::Arc, time::Duration};
 
     use radyko::{
         application::{
-            config::{RecordingConfig, RecordingDurationBufferConfig},
-            program_reserver::ProgramReserver,
-            utils::Utils,
+            state::RecorderState, usecase::reserve_program::ReserveProgramUseCase, utils::Utils,
         },
         domain::program::{
-            Program, RadykoDateTime, RecordingDurationBuffers, {EndAt, ProgramId, StartAt},
+            BufferSecs, EndAt, EndBuffer, Program, ProgramId, RadykoDateTime,
+            RecordingDurationBuffers, StartAt, StartBuffer,
         },
+        infrastructure::new_file_reserved_repository,
         telemetry::init_telemetry,
     };
-    use tempfile::TempDir;
+    use tempfile::{NamedTempFile, TempDir};
 
-    use crate::common::tests_common::{TEST_AREA_ID, radiko_client};
+    use crate::common::tests_common::{TEST_AREA_ID, exists_file, radiko_client};
 
     #[tokio::test]
     #[ignore = "実際に録音処理を走らせる都合上数秒を要するため"]
     /// cargo test -- --ignored で実行
     async fn now_on_air_recording_test() -> anyhow::Result<()> {
+        // Arrange
         init_telemetry("now_on_air_recording_test", None);
         let radiko_client = radiko_client().await;
         let now_on_air_programs = radiko_client
             .now_on_air_programs(Some(TEST_AREA_ID))
             .await?;
-        let program = now_on_air_programs.first().unwrap();
-        let temp_dir = TempDir::new()?;
-        let recording_config = RecordingConfig {
-            output_dir: PathBuf::from(temp_dir.path()),
-            schedule_update_interval_secs: 60,
-            duration_buffer_secs: Some(RecordingDurationBufferConfig { start: 0, end: 0 }),
-        };
-        let program_reserver = Arc::new(ProgramReserver::new(
-            radiko_client.clone(),
-            recording_config.output_dir,
-        ));
         let now = Utils::now_in_tz_tokyo();
         let recording_duration_secs = 5;
         // 今放送している適当な番組を録音
+        let program = now_on_air_programs.first().unwrap();
         let test_reserve_program = Program::new(
             ProgramId::new(
                 program.station_id(),
@@ -51,19 +42,30 @@ mod recording_program_test {
             program.title(),
             program.performer(),
         );
-        let (tx, _rx) = tokio::sync::mpsc::channel(100);
-        program_reserver
-            .reserve(
-                test_reserve_program,
-                RecordingDurationBuffers::from_config(None),
-                tx,
-            )
-            .await?;
+        let recorder_state = RecorderState::new(new_file_reserved_repository(
+            NamedTempFile::new_in("./")?.path().to_path_buf(),
+        ));
+        let sut = ReserveProgramUseCase::new(Arc::clone(radiko_client), Arc::new(recorder_state));
+        let output_root_dir = TempDir::new_in("./")?;
 
+        // Act
+        sut.exec(
+            vec![test_reserve_program.clone()],
+            output_root_dir.path().to_path_buf(),
+            RecordingDurationBuffers::new(
+                StartBuffer::new(Duration::from_secs(0)),
+                EndBuffer::new(Duration::from_secs(0)),
+            ),
+        )
+        .await?;
         // バックグラウンドで録音処理が実行される時間待機
-        // 録音処理でエラーが発生しないことのみを検証
         tokio::time::sleep(Duration::from_secs(recording_duration_secs)).await;
 
+        // Assert
+        assert!(exists_file(
+            output_root_dir.path().to_str().unwrap(),
+            &test_reserve_program.output_filename().to_string()
+        ));
         Ok(())
     }
 }

@@ -5,13 +5,12 @@ use std::{
 };
 
 use jiff::Zoned;
-use tempfile::TempDir;
 use tracing::error;
 
-use crate::application::credential::RadikoCredential;
+use crate::{application::credential::RadikoCredential, domain::program::RecordingDurationBuffers};
 use crate::{
     application::{
-        config::{RadykoConfig, RecordingConfig},
+        config::RadykoConfig,
         port::{RadikoClient, ReservedProgramRepository},
         utils::Utils,
     },
@@ -50,6 +49,21 @@ impl AppState {
         Self::new(radyko_config, radiko_client).await
     }
 
+    pub fn reload_config(&self, config_path: PathBuf) -> anyhow::Result<()> {
+        let radyko_config = RadykoConfig::parse_from_path(config_path)?;
+
+        // writer guardの生存期間を短くしたいのでスコープを明示的に切る
+        {
+            let mut config_guard = self
+                .config
+                .write()
+                .expect("reserved_programs RwLock poisoned");
+            *config_guard = radyko_config;
+        }
+
+        Ok(())
+    }
+
     pub fn radiko_client(&self) -> Arc<dyn RadikoClient> {
         Arc::clone(&self.radiko_client)
     }
@@ -75,13 +89,19 @@ impl AppState {
             .schedule_update_interval_secs
     }
 
-    pub fn http_cache_dir() -> anyhow::Result<TempDir> {
-        Ok(TempDir::new_in(".")?)
+    pub fn recording_duration_buffers(&self) -> RecordingDurationBuffers {
+        RecordingDurationBuffers::from_config(
+            self.config
+                .read()
+                .expect("config RwLock poisoned")
+                .recording
+                .duration_buffer_secs
+                .clone(),
+        )
     }
 }
 
 pub struct RecorderState {
-    app_state: Arc<AppState>,
     inner: RecorderStateRef,
 }
 
@@ -91,15 +111,12 @@ struct RecorderStateRef {
 }
 
 impl RecorderState {
-    pub fn new(
-        app_state: Arc<AppState>,
-        reserved_program_repository: Arc<dyn ReservedProgramRepository>,
-    ) -> Self {
+    pub fn new(reserved_program_repository: Arc<dyn ReservedProgramRepository>) -> Self {
         let inner = RecorderStateRef {
             reserved_programs: Arc::new(RwLock::new(HashSet::new())),
             reserved_program_repository,
         };
-        Self { app_state, inner }
+        Self { inner }
     }
 
     pub fn collect_aired_program_ids(&self, now: Option<Zoned>) -> anyhow::Result<Vec<ProgramId>> {
@@ -115,15 +132,18 @@ impl RecorderState {
     }
 
     pub fn add_reserve_programs(&self, programs: Vec<Program>) -> Vec<Program> {
-        let mut reserved_programs_guard = self
-            .inner
-            .reserved_programs
-            .write()
-            .expect("reserved_programs RwLock poisoned");
-        let reserved_programs = programs
-            .into_iter()
-            .filter(|program| reserved_programs_guard.insert(program.program_id()))
-            .collect::<Vec<_>>();
+        // writer guardの生存期間を短くしたいのでスコープを明示的に切る
+        let reserved_programs = {
+            let mut reserved_programs_guard = self
+                .inner
+                .reserved_programs
+                .write()
+                .expect("reserved_programs RwLock poisoned");
+            programs
+                .into_iter()
+                .filter(|program| reserved_programs_guard.insert(program.program_id()))
+                .collect::<Vec<_>>()
+        };
 
         if let Err(e) = self
             .inner
@@ -137,63 +157,30 @@ impl RecorderState {
     }
 
     pub fn remove_reserved_program(&self, program_id: ProgramId) -> anyhow::Result<()> {
-        self.inner
-            .reserved_programs
-            .write()
-            .expect("reserved_programs RwLock poisoned")
-            .remove(&program_id);
+        {
+            self.inner
+                .reserved_programs
+                .write()
+                .expect("reserved_programs RwLock poisoned")
+                .remove(&program_id);
+        }
         self.inner
             .reserved_program_repository
             .delete_reserved_program(program_id)
-    }
-
-    pub fn reload_config(&self, config_path: PathBuf) -> anyhow::Result<()> {
-        let radyko_config = RadykoConfig::parse_from_path(config_path)?;
-        let mut config_guard = self
-            .app_state
-            .config
-            .write()
-            .expect("app_state config RwLock poisoned");
-        *config_guard = radyko_config;
-        drop(config_guard);
-
-        Ok(())
-    }
-
-    pub fn app_state(&self) -> Arc<AppState> {
-        Arc::clone(&self.app_state)
-    }
-
-    pub fn config(&self) -> Arc<RwLock<RadykoConfig>> {
-        Arc::clone(&self.app_state.config)
-    }
-
-    pub fn recording_config(&self) -> RecordingConfig {
-        self.app_state
-            .config
-            .read()
-            .expect("app_state.config RwLock poisoned")
-            .recording
-            .clone()
-    }
-
-    pub fn schedule_update_interval_secs(&self) -> u64 {
-        self.app_state.schedule_update_interval_secs()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Read, path::PathBuf, sync::Arc};
+    use std::{io::Read, path::PathBuf};
 
     use jiff::{ToSpan, civil::DateTime};
 
     use crate::{
         RADYKO_TZ_NAME,
-        application::state::{AppState, RecorderState},
+        application::state::RecorderState,
         domain::program::{EndAt, Program, ProgramId, RadykoDateTime, StartAt, StationId},
         infrastructure::new_file_reserved_repository,
-        test_helper::{load_example_config, radiko_client},
     };
 
     const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
@@ -201,12 +188,9 @@ mod tests {
     async fn setup_recorder_state(
         reserved_programs_file_path: PathBuf,
     ) -> anyhow::Result<RecorderState> {
-        let app_state =
-            Arc::new(AppState::new(load_example_config()?, radiko_client().await.clone()).await?);
-        Ok(RecorderState::new(
-            app_state,
-            new_file_reserved_repository(reserved_programs_file_path),
-        ))
+        Ok(RecorderState::new(new_file_reserved_repository(
+            reserved_programs_file_path,
+        )))
     }
 
     #[tokio::test]
