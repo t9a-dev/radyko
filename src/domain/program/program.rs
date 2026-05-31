@@ -140,12 +140,12 @@ impl Program {
         (self.start_at(), self.clone())
     }
 
-    pub async fn media_list_url_for_live(
+    pub async fn media_playlist_url_for_live(
         &self,
         radiko_client: Arc<dyn RadikoClient>,
     ) -> anyhow::Result<String> {
         Ok(radiko_client
-            .media_list_url_for_live(self.station_id().clone())
+            .media_playlist_url_for_live(self.station_id().clone())
             .await?
             .to_string())
     }

@@ -56,7 +56,7 @@ impl application::port::RadikoClient for RadikoClient {
         self.inner.stream.live_stream_url(station_id).await
     }
 
-    async fn media_list_url_for_live(&self, station_id: StationId) -> anyhow::Result<String> {
+    async fn media_playlist_url_for_live(&self, station_id: StationId) -> anyhow::Result<String> {
         Ok(self
             .inner
             .stream
@@ -65,7 +65,7 @@ impl application::port::RadikoClient for RadikoClient {
             .to_string())
     }
 
-    async fn media_list_url_for_timefree(
+    async fn media_playlist_url_for_timefree(
         &self,
         program_id: ProgramId,
         seek_start_at: SeekStartAt,

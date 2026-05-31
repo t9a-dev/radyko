@@ -108,12 +108,14 @@ impl ReserveProgramUseCase {
             on_air_duration, program_info
         );
 
-        let media_list_url = program.media_list_url_for_live(self.radiko_client).await?;
+        let media_playlist_url = program
+            .media_playlist_url_for_live(self.radiko_client)
+            .await?;
         let stream_handler = StreamHandler::new(reqwest::Client::new());
         info!("start recording for live: {}", program_info);
         stream_handler
             .start_recording(
-                media_list_url,
+                media_playlist_url,
                 program.output_dir(output_root_dir),
                 &program.output_filename(),
                 on_air_duration,

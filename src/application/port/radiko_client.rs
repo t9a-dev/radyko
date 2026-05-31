@@ -11,9 +11,9 @@ pub trait RadikoClient: Send + Sync {
 
     async fn stream_url(&self, station_id: &str) -> String;
 
-    async fn media_list_url_for_live(&self, station_id: StationId) -> anyhow::Result<String>;
+    async fn media_playlist_url_for_live(&self, station_id: StationId) -> anyhow::Result<String>;
 
-    async fn media_list_url_for_timefree(
+    async fn media_playlist_url_for_timefree(
         &self,
         program_id: ProgramId,
         seek_start_at: SeekStartAt,

@@ -92,12 +92,12 @@ impl DownloadTimeFreeUseCase {
         program: Program,
         download_concurrency: usize,
     ) -> anyhow::Result<ProgramId> {
-        let stream_media_list_urls = self
+        let stream_media_playlist_urls = self
             .concurrent_timefree_medialist_urls(&program, download_concurrency)
             .await;
         let recorded_file_path = StreamHandler::new(self.http_client.clone())
             .download_timefree_program(
-                stream_media_list_urls,
+                stream_media_playlist_urls,
                 program.output_dir(output_root_dir),
                 &program.output_filename(),
             )

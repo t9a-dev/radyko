@@ -94,7 +94,7 @@ impl StreamHandler {
 
     pub async fn start_recording(
         &self,
-        media_list_url: String,
+        media_playlist_url: String,
         output_dir: PathBuf,
         file_name: &str,
         recording_duration: Duration,
@@ -111,7 +111,7 @@ impl StreamHandler {
 
         let recording = async || -> anyhow::Result<()> {
             let mut audio_segments_receiver =
-                self.start_read(media_list_url).instrument(span).await?;
+                self.start_read(media_playlist_url).instrument(span).await?;
             let end_recording = Instant::now() + recording_duration;
 
             while let Some(audio_segment) = audio_segments_receiver.recv().await {
@@ -145,13 +145,13 @@ impl StreamHandler {
 
     pub async fn download_timefree_program(
         &self,
-        mut stream_media_list_urls: BoxStream<'static, anyhow::Result<String>>,
+        mut stream_media_playlist_urls: BoxStream<'static, anyhow::Result<String>>,
         output_dir: PathBuf,
         file_name: &str,
     ) -> anyhow::Result<PathBuf> {
         let mut audio_segments = AudioSegments::new();
-        while let Some(media_list_url) = stream_media_list_urls.next().await {
-            self.collect_audio_segments(&media_list_url?, &mut audio_segments)
+        while let Some(media_playlist_url) = stream_media_playlist_urls.next().await {
+            self.collect_audio_segments(&media_playlist_url?, &mut audio_segments)
                 .await?;
         }
 
@@ -169,13 +169,13 @@ impl StreamHandler {
 
     async fn collect_audio_segments(
         &self,
-        media_list_url: &str,
+        media_playlist_url: &str,
         audio_segments: &mut AudioSegments,
     ) -> anyhow::Result<()> {
         let media_playlist_response = self
             .inner
             .client
-            .get(media_list_url)
+            .get(media_playlist_url)
             .send()
             .await
             .context("faild get playlist")?;
@@ -183,13 +183,13 @@ impl StreamHandler {
             .text()
             .await
             .context("faild get playlist text content")?;
-        let media_play_list = MediaPlaylist::builder()
+        let media_playlist = MediaPlaylist::builder()
             .allowable_excess_duration(Duration::from_secs(5))
             .parse(media_playlist_content.as_str())
             .context("faild parse media playlist")?;
 
-        let media_sequence = media_play_list.media_sequence;
-        let segments = media_play_list.segments;
+        let media_sequence = media_playlist.media_sequence;
+        let segments = media_playlist.segments;
 
         for (segment_sequence, segment) in segments {
             let segment_url = segment.uri();
@@ -265,7 +265,7 @@ impl StreamHandler {
 
     async fn start_read(
         &self,
-        media_list_url: String,
+        media_playlist_url: String,
     ) -> anyhow::Result<Receiver<anyhow::Result<Bytes>>> {
         trace!("start read");
         // radikoのHLSで返されるセグメント数が常に3なので適当に2倍を見ておいてbufferを6にした
@@ -277,7 +277,7 @@ impl StreamHandler {
                 // エラーをチャネル経由で伝搬する
                 // handle_hls_stream自体は無限ループなので正常系で値を返さないのでエラーのみ処理
                 if let Err(e) = this
-                    .handle_hls_stream(&media_list_url.clone(), tx.clone())
+                    .handle_hls_stream(&media_playlist_url.clone(), tx.clone())
                     .await
                 {
                     error!("handle hls stream error: {:#?}", e);
@@ -292,18 +292,18 @@ impl StreamHandler {
 
     async fn handle_hls_stream(
         self,
-        media_list_url: &str,
+        media_playlist_url: &str,
         tx: Sender<anyhow::Result<Bytes>>,
     ) -> anyhow::Result<()> {
         trace!("start handle hls stream");
         let mut last_processed_sequence = 0;
 
         loop {
-            // media_list_urlは再読込すると新しいセグメントの配信URLが返ってくる
+            // media_playlist_urlは再読込すると新しいセグメントの配信URLが返ってくる
             let media_playlist_response = self
                 .inner
                 .client
-                .get(media_list_url)
+                .get(media_playlist_url)
                 .send()
                 .await
                 .context("faild get playlist")?;
@@ -318,16 +318,16 @@ impl StreamHandler {
                audio segmentをファイルにappendしていくことが目的なので、segmentあたりの秒数がTARGETDURATIONを超過していても関係がない
                hls_m3u8クレートのmedia_playlist.rsのテストコードtoo_large_segment_duration_testで確認できる
             */
-            let media_play_list = MediaPlaylist::builder()
+            let media_playlist = MediaPlaylist::builder()
                 .allowable_excess_duration(Duration::from_secs(5))
                 .parse(media_playlist_content.as_str())
                 .context("faild parse media playlist")?;
-            let target_duration = media_play_list.target_duration;
+            let target_duration = media_playlist.target_duration;
 
             // 利用側でリトライ処理ができるようにエラーを伝搬させたい
             // しかし、無限ループでは関数の戻り値でエラーを伝搬できないのでチャネル経由でエラーも伝搬させる
             match self
-                .handle_hls_stream_step(media_play_list, &mut last_processed_sequence)
+                .handle_hls_stream_step(media_playlist, &mut last_processed_sequence)
                 .await
             {
                 Ok(audio_segments) => {
@@ -353,11 +353,11 @@ impl StreamHandler {
 
     async fn handle_hls_stream_step(
         &self,
-        media_play_list: MediaPlaylist<'_>,
+        media_playlist: MediaPlaylist<'_>,
         last_processed_sequence: &mut usize,
     ) -> anyhow::Result<Vec<Bytes>> {
-        let media_sequence = media_play_list.media_sequence;
-        let segments = media_play_list.segments;
+        let media_sequence = media_playlist.media_sequence;
+        let segments = media_playlist.segments;
 
         let mut audio_segments = Vec::new();
         for (segment_sequence, segment) in segments {
@@ -451,14 +451,14 @@ mod tests {
         let now_on_air_programs = radiko_client.now_on_air_programs(None).await?;
         let program = now_on_air_programs.first().unwrap();
 
-        let media_list_url = program
-            .media_list_url_for_live(Arc::clone(radiko_client))
+        let media_playlist_url = program
+            .media_playlist_url_for_live(Arc::clone(radiko_client))
             .await?;
         let temp_dir = TempDir::new_in(".")?;
         let stream_handler = Arc::new(StreamHandler::new(Client::new()));
         if let Err(e) = stream_handler
             .start_recording(
-                media_list_url,
+                media_playlist_url,
                 temp_dir.path().to_path_buf(),
                 &program.output_filename(),
                 Duration::from_secs(6),
