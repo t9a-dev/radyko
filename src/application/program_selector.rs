@@ -35,7 +35,7 @@ impl StartTimes {
 
         Ok(Self(
             schedule
-                .after(&target_datetime)
+                .after(target_datetime)
                 .take_while(|datetime| *datetime < days_after)
                 .map(StartAt::new)
                 .collect::<Vec<_>>(),
