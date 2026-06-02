@@ -62,13 +62,13 @@ impl Program {
     }
 
     pub fn info(&self) -> String {
-        format!(
+        sanitise(&format!(
             "{}_{}_{}_{}",
             self.start_at().display(),
             self.station_id(),
             self.title,
             self.performer
-        )
+        ))
     }
 
     pub fn output_dir(&self, output_root_dir: PathBuf) -> PathBuf {
