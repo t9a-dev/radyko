@@ -2,15 +2,16 @@ mod common;
 
 #[cfg(test)]
 mod timefree_test {
-    use std::{fs, ops::Not, path::PathBuf, str::FromStr, time::Duration};
+    use std::{ops::Not, path::Path, sync::Arc};
 
-    use futures::pin_mut;
-    use radyko::app::{
-        hls::{ByteSize, StreamHandler},
-        program_reserver::ReserveProgram,
+    use radyko::{
+        application::{state::RecorderState, usecase::download_timefree::DownloadTimeFreeUseCase},
+        infrastructure::new_file_reserved_repository,
     };
+    use reqwest::Client;
+    use tempfile::NamedTempFile;
 
-    use crate::common::tests_common::radiko_client;
+    use crate::common::tests_common::{exists_file, radiko_client};
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
@@ -24,7 +25,7 @@ mod timefree_test {
             )
             .await?;
 
-        assert!(programs.data.is_empty().not());
+        assert!(programs.to_vec().is_empty().not());
         println!("resolve keyword programs: {:#?}", programs);
 
         /*
@@ -39,6 +40,7 @@ mod timefree_test {
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn download_timefree_test() -> anyhow::Result<()> {
+        // Arrange
         let radiko_client = radiko_client().await;
         let timefree_programs = radiko_client
             .search_timefree_programs_with_keyword(
@@ -46,40 +48,32 @@ mod timefree_test {
                 Some("LFR"),
                 None,
             )
-            .await?;
-        let dummy_program = timefree_programs.data.first().unwrap();
+            .await?
+            .to_vec();
+        let first_program = timefree_programs.first().unwrap();
+        println!("resolve keyword program: {:#?}", first_program);
 
-        println!("resolve keyword program: {:#?}", dummy_program);
-        /*
-           station_id: "LFR"
-           start_time: 2026-04-26T03:00:00JST,
-           end_time: 2026-04-26T05:00:00JST,
-        */
-
-        let stream_medialist_urls = radiko_client.stream_timefree_medialist_urls(
-            dummy_program.station_id.to_string(),
-            dummy_program.start_time.clone(),
-            dummy_program.end_time.clone(),
+        let output_root_dir = Path::new("./timefree_test");
+        let _ = std::fs::create_dir(output_root_dir);
+        let reserved_state_file_path = NamedTempFile::new_in(output_root_dir)?;
+        let recorder_state = RecorderState::new(new_file_reserved_repository(
+            reserved_state_file_path.path().to_path_buf(),
+        ));
+        recorder_state.add_reserve_programs(vec![first_program.clone()]);
+        let sut = DownloadTimeFreeUseCase::new(
+            Client::new(),
+            Arc::clone(radiko_client),
+            Arc::new(recorder_state),
         );
-        pin_mut!(stream_medialist_urls);
 
-        let stream_handler = StreamHandler::new(reqwest::Client::new());
-        let output_dir_path = PathBuf::from_str("./timefree_test")?;
-        std::fs::create_dir_all(&output_dir_path)?;
-        let download_program = ReserveProgram::new(dummy_program.clone(), output_dir_path, None);
-        let downloaded_file_path = stream_handler
-            .download_timefree_program(
-                stream_medialist_urls,
-                download_program.output_dir(),
-                &download_program.output_filename(),
-            )
-            .await?;
-        let file = fs::File::open(downloaded_file_path)?;
-        StreamHandler::verify_recorded_file(
-            ByteSize::from_bytes(file.metadata()?.len()),
-            Duration::from_secs(download_program.on_air_duration().0),
-        )?;
+        // Act
+        sut.exec(output_root_dir).await?;
 
+        // Assert
+        assert!(exists_file(
+            output_root_dir.to_str().unwrap(),
+            &first_program.output_filename().to_string()
+        ));
         Ok(())
     }
 }

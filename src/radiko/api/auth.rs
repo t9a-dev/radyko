@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, str::FromStr, sync::Arc};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 
 use base64::{Engine, engine::general_purpose};
 use regex::Regex;
@@ -9,12 +9,23 @@ use reqwest::{
     cookie::{self, Jar},
     header::HeaderMap,
 };
-use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::info;
 
-use crate::radiko::api::endpoint::Endpoint;
+use crate::{application::credential::RadikoCredential, radiko::api::endpoint::Endpoint};
 
+#[derive(Debug, Clone, Deserialize)]
+struct LoginResponse {
+    radiko_session: String,
+    // twitter_name: Option<String>,
+    // status: String,
+    // unpaid: String,
+    // areafree: String,
+    // member_ukey: String,
+    // facebook_name: Option<String>,
+    // privileges: Vec<String>,
+    // paid_member: String,
+}
 #[derive(Debug, Clone)]
 pub struct RadikoAuthedClient(reqwest::Client);
 
@@ -30,34 +41,12 @@ struct RadikoAuthRef {
     http_client: RadikoAuthedClient,
     auth_token: String,
     stream_lsid: String,
-    email_address: Option<SecretString>,
-    password: Option<SecretString>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct LoginResponse {
-    twitter_name: Option<String>,
-    status: String,
-    unpaid: String,
-    radiko_session: String,
-    areafree: String,
-    member_ukey: String,
-    facebook_name: Option<String>,
-    privileges: Vec<String>,
-    paid_member: String,
+    credential: Option<RadikoCredential>,
 }
 
 impl RadikoAuth {
-    pub async fn new() -> anyhow::Result<Self> {
-        Self::init(None, None).await
-    }
-
-    pub async fn new_area_free(email_address: &str, password: &str) -> anyhow::Result<Self> {
-        Self::init(
-            Some(SecretString::new(email_address.into())),
-            Some(SecretString::new(password.into())),
-        )
-        .await
+    pub async fn new(credential: Option<RadikoCredential>) -> anyhow::Result<Self> {
+        Self::init(credential).await
     }
 
     pub fn area_id(&self) -> Cow<'_, str> {
@@ -81,14 +70,10 @@ impl RadikoAuth {
     }
 
     pub async fn refresh_auth(&self) -> Result<Self> {
-        Self::init(
-            self.inner.email_address.clone(),
-            self.inner.password.clone(),
-        )
-        .await
+        Self::init(self.inner.credential.clone()).await
     }
 
-    async fn init(mail: Option<SecretString>, pass: Option<SecretString>) -> Result<Self> {
+    async fn init(credential: Option<RadikoCredential>) -> Result<Self> {
         let auth1_url = Endpoint::auth1_endpoint();
         let auth2_url = Endpoint::auth2_endpoint();
         let auth_key = Self::get_public_auth_key().await?;
@@ -108,14 +93,8 @@ impl RadikoAuth {
         let default_area_id = area_id_caps[0].to_string();
 
         // login
-        let (is_area_free, cookie) = match (mail.clone(), pass.clone()) {
-            (Some(mail), Some(pass)) => (
-                true,
-                RadikoAuth::login(mail.clone().expose_secret(), pass.clone().expose_secret())
-                    .await?,
-            ),
-            _ => (false, Arc::new(Jar::default())),
-        };
+        let is_area_free = &credential.is_some();
+        let cookie = Self::login(&credential).await?;
         let logined_client = Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .cookie_provider(cookie.clone())
@@ -184,34 +163,24 @@ impl RadikoAuth {
         Ok(Self {
             inner: Arc::new(RadikoAuthRef {
                 area_id: default_area_id.to_string(),
-                area_free: is_area_free,
+                area_free: *is_area_free,
                 http_client: RadikoAuthedClient(authed_client),
                 auth_token: auth_token.to_string(),
                 stream_lsid: lsid,
-                email_address: mail,
-                password: pass,
+                credential,
             }),
         })
     }
 
-    async fn get_public_auth_key() -> anyhow::Result<String> {
-        // https://github.com/miyagawa/ripdiko/blob/e9080f99c4c45b112256d822802f3dd56ab908f1/bin/ripdiko#L66
-        let url = "https://radiko.jp/apps/js/playerCommon.js";
-        let response_body = reqwest::get(url).await?.text().await?;
-        let auth_key_pattern =
-            regex::Regex::new(r"new RadikoJSPlayer\(.*?,.*?,.'(?P<auth_key>\w+)'")?;
-        let Some(auth_key_caps) = auth_key_pattern.captures(&response_body) else {
-            // public key from https://radiko.jp/apps/js/playerCommon.js
-            return Ok("bcd151073c03b352e1ef2fd66c32209da9ca0afa".to_string());
+    pub async fn login(credential: &Option<RadikoCredential>) -> anyhow::Result<Arc<cookie::Jar>> {
+        let Some(credential) = credential else {
+            return Ok(Arc::new(Jar::default()));
         };
 
-        Ok(auth_key_caps["auth_key"].to_string())
-    }
-
-    async fn login(mail: &str, pass: &str) -> Result<Arc<cookie::Jar>> {
         let mut login_info = HashMap::new();
-        login_info.insert("mail", mail);
-        login_info.insert("pass", pass);
+        login_info.insert("mail", credential.expose_email_address());
+        login_info.insert("pass", credential.expose_password());
+
         let login_res: LoginResponse = Client::new()
             .post(Endpoint::login_endpoint())
             .form(&login_info)
@@ -231,13 +200,27 @@ impl RadikoAuth {
             .await?;
 
         if !login_check_res.status().is_success() {
-            return Err(anyhow!(
+            bail!(format!(
                 "login check failed: {}",
                 login_check_res.text().await?
             ));
         }
 
         Ok(jar)
+    }
+
+    async fn get_public_auth_key() -> anyhow::Result<String> {
+        // https://github.com/miyagawa/ripdiko/blob/e9080f99c4c45b112256d822802f3dd56ab908f1/bin/ripdiko#L66
+        let url = "https://radiko.jp/apps/js/playerCommon.js";
+        let response_body = reqwest::get(url).await?.text().await?;
+        let auth_key_pattern =
+            regex::Regex::new(r"new RadikoJSPlayer\(.*?,.*?,.'(?P<auth_key>\w+)'")?;
+        let Some(auth_key_caps) = auth_key_pattern.captures(&response_body) else {
+            // public key from https://radiko.jp/apps/js/playerCommon.js
+            return Ok("bcd151073c03b352e1ef2fd66c32209da9ca0afa".to_string());
+        };
+
+        Ok(auth_key_caps["auth_key"].to_string())
     }
 }
 
@@ -250,8 +233,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "エリアフリー会員情報を持つことに依存しているテスト"]
     async fn init_area_free_client_smoke() -> Result<()> {
-        let auth_manager = radiko_auth(AuthType::AreaFree).await;
-        assert!(auth_manager.area_free());
+        let auth_state = radiko_auth(AuthType::AreaFree).await;
+        assert!(auth_state.read().await.area_free());
 
         Ok(())
     }
@@ -259,8 +242,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn init_not_area_free_client_smoke() -> Result<()> {
-        let auth_manager = radiko_auth(AuthType::Normal).await;
-        assert!(!auth_manager.area_free());
+        let auth_state = radiko_auth(AuthType::Normal).await;
+        assert!(!auth_state.read().await.area_free());
 
         Ok(())
     }
@@ -268,13 +251,13 @@ mod tests {
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn refresh_auth_test() -> Result<()> {
-        let auth_manager = radiko_auth(AuthType::Normal).await;
-        let refreshed_auth_manager = auth_manager.refresh_auth().await?;
+        let auth_state = radiko_auth(AuthType::Normal).await;
+        let previous_token = auth_state.read().await.auth_token().to_string();
 
-        assert_ne!(
-            auth_manager.auth_token(),
-            refreshed_auth_manager.auth_token()
-        );
+        let refreshed_auth_state = auth_state.read().await.refresh_auth().await?;
+        let refreshed_token = refreshed_auth_state.auth_token().to_string();
+
+        assert_ne!(previous_token, refreshed_token);
 
         Ok(())
     }

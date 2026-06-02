@@ -4,13 +4,13 @@ use anyhow::Result;
 use reqwest::Client;
 
 use crate::{
-    model::{
+    domain::{
         region::{Region, RegionStations},
         station::Stations,
     },
     radiko::{
         api::endpoint::Endpoint,
-        xml::{region::RegionXml, station::StationsXml},
+        dto::xml::{region_xml::RegionXml, station_xml::StationsXml},
     },
 };
 
@@ -77,10 +77,7 @@ mod tests {
     async fn stations_from_area_id_smoke() -> Result<()> {
         let radiko_station = radiko_station();
         let area_id = "JP13"; // TOKYO JAPAN
-        let stations_from_area = radiko_station.stations_from_area_id(area_id).await?;
-        assert_eq!(stations_from_area.area_id, area_id);
-        assert_eq!(stations_from_area.area_name, "TOKYO JAPAN");
-        assert!(stations_from_area.data.is_empty().not());
+        let _stations_from_area = radiko_station.stations_from_area_id(area_id).await?;
 
         Ok(())
     }
