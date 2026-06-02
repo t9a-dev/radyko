@@ -30,19 +30,19 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor}}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
+      - uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
         id: meta
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}
           tags: |
             type=semver,pattern={{ version }},value=${{ env.VERSION }}
             type=raw,value=latest
-      - uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+      - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           push: true
           context: .
@@ -105,7 +105,7 @@ jobs:
 
       - name: Install cross
         if: runner.os == 'Linux' && runner.arch == 'X64'
-        uses: taiki-e/install-action@c070f87102a1c75b3183910f391c1cb887fe13c8 # v2
+        uses: taiki-e/install-action@e49978b799e49ff429d162b7a30601a569ab6538 # v2
         with:
           tool: cross
 

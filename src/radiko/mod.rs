@@ -1,23 +1,21 @@
-pub mod api;
+mod api;
 mod client;
-mod converter;
-pub(crate) mod xml;
-pub use converter::jst_datetime;
+mod dto;
+mod mapper;
 
-pub use client::RadikoClient;
+pub use client::new_radiko_client;
 
 #[cfg(test)]
 mod test_helper {
-    use anyhow::Context;
-    use reqwest::Client;
-    use secrecy::ExposeSecret;
+    use std::sync::Arc;
 
-    use crate::{
-        app::credential::RadikoCredential,
-        radiko::api::{
-            auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
-            stream::RadikoStream,
-        },
+    use reqwest::Client;
+    use tokio::sync::RwLock;
+
+    use crate::application::credential::RadikoCredential;
+    use crate::radiko::api::{
+        auth::RadikoAuth, program::RadikoProgram, search::RadikoSearch, station::RadikoStation,
+        stream::RadikoStream,
     };
 
     pub enum AuthType {
@@ -26,8 +24,9 @@ mod test_helper {
     }
 
     // tokio::sync
-    static RADIKO_AUTH: tokio::sync::OnceCell<RadikoAuth> = tokio::sync::OnceCell::const_new();
-    static RADIKO_AUTH_AREA_FREE: tokio::sync::OnceCell<RadikoAuth> =
+    static RADIKO_AUTH: tokio::sync::OnceCell<Arc<RwLock<RadikoAuth>>> =
+        tokio::sync::OnceCell::const_new();
+    static RADIKO_AUTH_AREA_FREE: tokio::sync::OnceCell<Arc<RwLock<RadikoAuth>>> =
         tokio::sync::OnceCell::const_new();
     static RADIKO_STREAM: tokio::sync::OnceCell<RadikoStream> = tokio::sync::OnceCell::const_new();
     // std::sync
@@ -40,25 +39,20 @@ mod test_helper {
         CLIENT.get_or_init(Client::new)
     }
 
-    pub async fn radiko_auth(auth_type: AuthType) -> &'static RadikoAuth {
+    pub async fn radiko_auth(auth_type: AuthType) -> &'static Arc<RwLock<RadikoAuth>> {
         match auth_type {
             AuthType::Normal => {
                 RADIKO_AUTH
-                    .get_or_init(|| async { RadikoAuth::new().await.unwrap() })
+                    .get_or_init(|| async {
+                        Arc::new(RwLock::new(RadikoAuth::new(None).await.unwrap()))
+                    })
                     .await
             }
             AuthType::AreaFree => {
                 RADIKO_AUTH_AREA_FREE
                     .get_or_init(|| async {
-                        let credential = RadikoCredential::load_credential()
-                            .context("エリアフリー会員情報の読み込みに失敗")
-                            .unwrap();
-                        RadikoAuth::new_area_free(
-                            credential.email_address.expose_secret(),
-                            credential.password.expose_secret(),
-                        )
-                        .await
-                        .unwrap()
+                        let credential = RadikoCredential::load_from_env_file();
+                        Arc::new(RwLock::new(RadikoAuth::new(credential).await.unwrap()))
                     })
                     .await
             }

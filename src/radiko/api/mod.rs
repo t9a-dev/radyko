@@ -1,9 +1,8 @@
-#![allow(dead_code)]
-
-pub(super) mod auth;
-pub mod endpoint;
-pub(super) mod program;
-pub(super) mod search;
-pub(super) mod station;
-pub(super) mod stream;
-pub(crate) mod utils;
+pub(in crate::radiko) mod auth;
+pub(in crate::radiko) mod endpoint;
+pub(in crate::radiko) mod program;
+pub(in crate::radiko) mod search;
+#[allow(dead_code)]
+pub(in crate::radiko) mod station;
+pub(in crate::radiko) mod stream;
+pub(in crate::radiko) mod utils;

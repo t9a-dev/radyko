@@ -1,5 +1,7 @@
 use jiff::Zoned;
 
+use crate::domain::program::{ProgramId, RadykoDateTime, SeekStartAt};
+
 const V2_URL: &str = "https://radiko.jp/v2/";
 const V3_URL: &str = "https://radiko.jp/v3/";
 const V4_URL: &str = "https://radiko.jp/v4/";
@@ -13,7 +15,9 @@ impl Endpoint {
     // radiko_session取得に利用
     pub const LOGIN_CHECK_URL: &str = "https://radiko.jp/ap/member/webapi/v2/member/login/check";
 
-    pub const DATETIME_FORMAT: &str = "%Y%m%d%H%M%S";
+    // 型付けされた日付情報を外部から受け取って、このモジュールの中で扱うときにフォーマットする
+    // よって外部に公開(pub)しない
+    const DATETIME_FORMAT: &str = "%Y%m%d%H%M%S";
 
     pub fn area_id_endpoint() -> String {
         AREA_URL.to_string()
@@ -35,10 +39,12 @@ impl Endpoint {
         format!("{}api/program/search", V3_URL)
     }
 
+    #[allow(dead_code)]
     pub fn station_list_from_area_id_endpoint(area_id: &str) -> String {
         format!("{}station/list/{}.xml", V3_URL, area_id)
     }
 
+    #[allow(dead_code)]
     pub fn station_list_all_endpoint() -> String {
         format!("{}station/region/full.xml", V3_URL)
     }
@@ -55,6 +61,7 @@ impl Endpoint {
     /// weekly_programs_endpoint の利用を推奨
     // radiko apiの仕様で深夜3時から始まる番組は前日の番組表にしか含まれないので注意
     // 2026/01/15/03:00~の番組情報は2026/01/15の番組表には含まれず2026/01/14の番組表に含まれる
+    #[allow(dead_code)]
     pub fn date_programs_endpoint(station_id: &str, date: Zoned) -> String {
         format!(
             "{}program/v3/date/{}/station/{}.xml",
@@ -114,39 +121,61 @@ impl Endpoint {
     */
     /// 無料プランタイムフリーエンドポイント
     pub fn timefree_playlist_create_url_endpoint(
-        station_id: &str,
-        start_at: &Zoned,
-        end_at: &Zoned,
-        seek: &Zoned,
+        program_id: ProgramId,
+        seek_start_at: &SeekStartAt,
         lsid: &str,
     ) -> String {
         let (start_at, end_at, seek) = (
-            start_at.strftime(Self::DATETIME_FORMAT).to_string(),
-            end_at.strftime(Self::DATETIME_FORMAT).to_string(),
-            seek.strftime(Self::DATETIME_FORMAT).to_string(),
+            program_id.clone().start_at().format(Self::DATETIME_FORMAT),
+            program_id.clone().end_at().format(Self::DATETIME_FORMAT),
+            seek_start_at.format(Self::DATETIME_FORMAT),
         );
         format!(
             "https://tf-f-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8?station_id={}&start_at={}&ft={}&end_at={}&to={}&seek={}&preroll=0&l=15&lsid={}&type=b",
-            station_id, start_at, start_at, end_at, end_at, seek, lsid
+            program_id.station_id().clone().get(),
+            start_at,
+            start_at,
+            end_at,
+            end_at,
+            seek,
+            lsid
         )
     }
 
     /// エリアフリープラン会員タイムフリーエンドポイント
     pub fn timefree_for_area_free_playlist_create_url_endpoint(
-        station_id: &str,
-        start_at: &Zoned,
-        end_at: &Zoned,
-        seek: &Zoned,
+        program_id: &ProgramId,
+        seek_start_at: &SeekStartAt,
         lsid: &str,
     ) -> String {
         let (start_at, end_at, seek) = (
-            start_at.strftime(Self::DATETIME_FORMAT).to_string(),
-            end_at.strftime(Self::DATETIME_FORMAT).to_string(),
-            seek.strftime(Self::DATETIME_FORMAT).to_string(),
+            program_id
+                .start_at()
+                .clone()
+                .date()
+                .strftime(Self::DATETIME_FORMAT)
+                .to_string(),
+            program_id
+                .end_at()
+                .clone()
+                .date()
+                .strftime(Self::DATETIME_FORMAT)
+                .to_string(),
+            seek_start_at
+                .clone()
+                .date()
+                .strftime(Self::DATETIME_FORMAT)
+                .to_string(),
         );
         format!(
             "https://tf-c-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8?station_id={}&start_at={}&ft={}&end_at={}&to={}&seek={}&preroll=0&l=15&lsid={}&type=c",
-            station_id, start_at, start_at, end_at, end_at, seek, lsid
+            program_id.station_id().clone().get(),
+            start_at,
+            start_at,
+            end_at,
+            end_at,
+            seek,
+            lsid
         )
     }
 }
@@ -158,7 +187,10 @@ mod tests {
 
     use super::Endpoint;
     use crate::{
-        RADYKO_TZ_NAME, constants::test_constants::TEST_STATION_ID, radiko::api::utils::Utils,
+        RADYKO_TZ_NAME,
+        constants::test_constants::TEST_STATION_ID,
+        domain::program::{EndAt, ProgramId, RadykoDateTime, SeekStartAt, StartAt, StationId},
+        radiko::api::utils::Utils,
     };
 
     #[test]
@@ -287,45 +319,70 @@ mod tests {
 
     #[test]
     fn timefree_playlist_create_url_endpoint_test() {
-        let station_id = "LFR";
-
         let start_at_s = "20260426010000";
         let end_at_s = "20260426030000";
         let seek_s = "20260426030000";
         let start_at = datetime_parse_from_string(start_at_s);
         let end_at = datetime_parse_from_string(end_at_s);
-        let seek = datetime_parse_from_string(seek_s);
+        let seek_start_at = datetime_parse_from_string(seek_s);
+        let program_id = ProgramId::new(
+            StationId::new("LFR".to_string()),
+            StartAt::new(start_at),
+            EndAt::new(end_at),
+        );
+
         let lsid = Utils::generate_md5_hash();
         let playlist_crate_url = Endpoint::timefree_playlist_create_url_endpoint(
-            station_id, &start_at, &end_at, &seek, &lsid,
+            program_id.clone(),
+            &SeekStartAt::new(seek_start_at),
+            &lsid,
         );
         assert_eq!(
             playlist_crate_url,
             format!(
                 "https://tf-f-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8?station_id={}&start_at={}&ft={}&end_at={}&to={}&seek={}&preroll=0&l=15&lsid={}&type=b",
-                station_id, start_at_s, start_at_s, end_at_s, end_at_s, seek_s, lsid
+                program_id.station_id().clone().get(),
+                start_at_s,
+                start_at_s,
+                end_at_s,
+                end_at_s,
+                seek_s,
+                lsid
             )
         )
     }
 
     #[test]
     fn timefree_for_area_free_playlist_create_url_endpoint_test() {
-        let station_id = "LFR";
         let start_at_s = "20260426010000";
         let end_at_s = "20260426030000";
         let seek_s = "20260426030000";
         let start_at = datetime_parse_from_string(start_at_s);
         let end_at = datetime_parse_from_string(end_at_s);
-        let seek = datetime_parse_from_string(seek_s);
+        let seek_start_at = datetime_parse_from_string(seek_s);
+        let program_id = ProgramId::new(
+            StationId::new("LFR".to_string()),
+            StartAt::new(start_at),
+            EndAt::new(end_at),
+        );
+
         let lsid = Utils::generate_md5_hash();
         let playlist_crate_url = Endpoint::timefree_for_area_free_playlist_create_url_endpoint(
-            station_id, &start_at, &end_at, &seek, &lsid,
+            &program_id,
+            &SeekStartAt::new(seek_start_at),
+            &lsid,
         );
         assert_eq!(
             playlist_crate_url,
             format!(
                 "https://tf-c-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8?station_id={}&start_at={}&ft={}&end_at={}&to={}&seek={}&preroll=0&l=15&lsid={}&type=c",
-                station_id, start_at_s, start_at_s, end_at_s, end_at_s, seek_s, lsid
+                program_id.station_id().clone().get(),
+                start_at_s,
+                start_at_s,
+                end_at_s,
+                end_at_s,
+                seek_s,
+                lsid
             )
         )
     }

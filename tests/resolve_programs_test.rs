@@ -2,31 +2,30 @@ mod common;
 
 #[cfg(test)]
 mod resolve_programs_test {
-    use std::ops::Not;
+    use std::{collections::HashMap, ops::Not, sync::Arc};
 
-    use crate::common::tests_common::{load_example_config, radiko_client};
-    use radyko::app::{program_resolver::resolve_selector, program_selector::ProgramSelector};
+    use crate::common::tests_common::{TEST_STATION_ID, radiko_client};
+    use radyko::{
+        application::{
+            config::{RadykoConfigKeywords, RadykoConfigRules},
+            types::Station,
+        },
+        domain::program::Programs,
+    };
 
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn resolve_keyword_programs() -> anyhow::Result<()> {
         let radiko_client = radiko_client().await;
-        let mut radyko_config = load_example_config()?;
-        {
-            // "オールナイトニッポン"をキーワードに加えて検索結果が常に1件以上になるように調整
-            let keywords = &mut radyko_config.keywords.as_mut().unwrap();
-            keywords.0.insert(
-                radyko::app::types::Station::Id("LFR".to_string()),
-                vec!["オールナイトニッポン".to_string()],
-            );
-        }
-
-        let mut result = Vec::new();
-        let program_selectors = ProgramSelector::from_keywords(radyko_config.keywords.unwrap());
-        for program_selector in program_selectors {
-            let programs = resolve_selector(radiko_client, program_selector).await?;
-            result.extend(programs);
-        }
+        // "オールナイトニッポン"をキーワードに加えて検索結果が常に1件以上になるように調整
+        let mut keywords = HashMap::new();
+        keywords.insert(
+            radyko::application::types::Station::Id("LFR".to_string()),
+            vec!["オールナイトニッポン".to_string()],
+        );
+        let program_selectors = RadykoConfigKeywords::new(keywords).into_program_selectors();
+        let result =
+            Programs::resolve_selectors(Arc::clone(radiko_client), program_selectors).await?;
 
         assert!(result.is_empty().not());
         println!("resolve keyword programs: {:#?}", result);
@@ -37,15 +36,14 @@ mod resolve_programs_test {
     #[tokio::test]
     #[ignore = "radiko apiに依存"]
     async fn resolve_rule_programs() -> anyhow::Result<()> {
-        let radyko_config = load_example_config()?;
         let radiko_client = radiko_client().await;
-
-        let mut result = Vec::new();
-        let program_selectors = ProgramSelector::from_rules(radyko_config.rules.unwrap())?;
-        for program_selector in program_selectors {
-            let programs = resolve_selector(radiko_client, program_selector).await?;
-            result.extend(programs);
-        }
+        let rules: HashMap<Station, Vec<String>> = HashMap::from_iter(vec![(
+            Station::Id(TEST_STATION_ID.to_string()),
+            vec!["* * * * * *".to_string()],
+        )]);
+        let program_selectors = RadykoConfigRules::new(rules).try_into_program_selectors(None)?;
+        let result =
+            Programs::resolve_selectors(Arc::clone(radiko_client), program_selectors).await?;
 
         assert!(result.is_empty().not());
         println!("resolve rule programs: {:#?}", result);

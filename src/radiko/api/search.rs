@@ -3,9 +3,11 @@ use serde_with::skip_serializing_none;
 use strum_macros::{AsRefStr, Display};
 use thiserror::Error;
 
-use crate::model::program::Programs;
-use crate::radiko::api::endpoint::Endpoint;
-use anyhow::Result;
+use crate::{
+    domain::program::Programs,
+    radiko::{api::endpoint::Endpoint, dto::json::program_json::RootJson},
+};
+use anyhow::{Context, Result};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum SearchConditionError {
@@ -22,7 +24,8 @@ impl RadikoSearch {
     pub fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
-    pub async fn find_program(&self, condition: &RadikoSearchCondition) -> Result<Programs> {
+
+    pub async fn search_programs(&self, condition: &RadikoSearchCondition) -> Result<Programs> {
         if condition.key.is_empty() {
             return Err(SearchConditionError::RequireKeyword.into());
         }
@@ -36,7 +39,9 @@ impl RadikoSearch {
             .text()
             .await?;
 
-        Ok(serde_json::from_str(res)?)
+        serde_json::from_str::<RootJson>(res)?
+            .try_into()
+            .context("response json deserialize error")
     }
 }
 
@@ -145,8 +150,8 @@ mod tests {
             .key
             .push("オールナイトニッポン".to_string());
 
-        let search_result = radiko_search.find_program(&search_condition).await?;
-        assert!(search_result.data.is_empty().not());
+        let search_result = radiko_search.search_programs(&search_condition).await?;
+        assert!(search_result.to_vec().is_empty().not());
 
         Ok(())
     }
@@ -158,7 +163,7 @@ mod tests {
         let mut search_condition = RadikoSearchCondition::new();
         search_condition.station_id = Some(vec![TEST_STATION_ID.to_string()]);
 
-        let search_result = radiko_search.find_program(&search_condition).await;
+        let search_result = radiko_search.search_programs(&search_condition).await;
         assert_eq!(
             search_result
                 .unwrap_err()

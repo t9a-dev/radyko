@@ -40,9 +40,11 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "loc
 futures = "0.3.32"
 jiff = "0.2.24"
 jiff-cron = "0.2.0"
+async-trait = "0.1.89"
 
 [dev-dependencies]
 insta = { version = "1.47.2", features = ["yaml"] }
+walkdir = "2.5.0"
 
 # insta faster runs setting
 # https://insta.rs/docs/quickstart/
